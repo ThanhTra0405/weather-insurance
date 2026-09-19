@@ -8,7 +8,10 @@ import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 contract LiquidityPool is Ownable, Pausable, ReentrancyGuard {
     uint256 totalDeposited;
     uint256 totalLocked;
-
+    uint256 public totalShares;
+    mapping(address => uint256) public sharesOf;
+    address public addressPayoutEngine;
+    event PayoutEngineSet(address indexed payoutEngine);
     address public addressPolicyManager;
     event LiquidityAdded(address indexed provider, uint256 amount);
     event LiquidityWithdrawn(address indexed provider, uint256 amount);
@@ -23,11 +26,19 @@ contract LiquidityPool is Ownable, Pausable, ReentrancyGuard {
         _;
     }
 
+    modifier onlyPayoutEngine() {
+        require(msg.sender == addressPayoutEngine, "Khong phai PayoutEngine");
+        _;
+    }
+
     mapping(uint256 => uint256) public lockedAmount;
 
     function setPolicyManager(address _policyManager) external onlyOwner {
         require(_policyManager != address(0), "PolicyManager la dia chi 0");
-        require(addressPolicyManager == address(0), "PolicyManager da duoc set roi");
+        require(
+            addressPolicyManager == address(0),
+            "PolicyManager da duoc set roi"
+        );
         addressPolicyManager = _policyManager;
         emit PolicyManagerSet(_policyManager);
     }
@@ -52,19 +63,35 @@ contract LiquidityPool is Ownable, Pausable, ReentrancyGuard {
 
     function provideLiquidity() external payable whenNotPaused {
         require(msg.value > 0, "Khong co eth duoc gui vao");
+        uint256 shares = totalShares == 0
+            ? msg.value
+            : (msg.value * totalShares) / totalDeposited;
+        sharesOf[msg.sender] += shares;
+        totalShares += shares;
         totalDeposited += msg.value;
         emit LiquidityAdded(msg.sender, msg.value);
     }
 
-        function withdrawLiquidity(uint256 amount) external whenNotPaused nonReentrant {
-            require(amount > 0 && amount <= totalDeposited - totalLocked, "Khong du eth");
-            totalDeposited -= amount;
-            (bool success, ) = msg.sender.call{value: amount}(""); 
-            require(success, "Gui eth that bai");
-            emit LiquidityWithdrawn(msg.sender, amount);
-        }
+    function withdrawLiquidity(
+        uint256 shareAmount
+    ) external whenNotPaused nonReentrant {
+        require(
+            shareAmount > 0 && shareAmount <= sharesOf[msg.sender],
+            "Khong du share"
+        );
+        uint256 amount = (shareAmount * totalDeposited) / totalShares;
+        require(amount <= totalDeposited - totalLocked, "Vuot von kha dung");
 
-    function getPoolBalance() external view returns(uint256) {
+        sharesOf[msg.sender] -= shareAmount;
+        totalShares -= shareAmount;
+        totalDeposited -= amount;
+
+        (bool success, ) = msg.sender.call{value: amount}("");
+        require(success, "Gui eth that bai");
+        emit LiquidityWithdrawn(msg.sender, amount);
+    }
+
+    function getPoolBalance() external view returns (uint256) {
         return address(this).balance;
     }
 
@@ -74,5 +101,28 @@ contract LiquidityPool is Ownable, Pausable, ReentrancyGuard {
 
     function unpause() external onlyOwner {
         _unpause();
+    }
+
+    function setPayoutEngine(address _payoutEngine) external onlyOwner {
+        require(_payoutEngine != address(0), "PayoutEngine la dia chi 0");
+        require(
+            addressPayoutEngine == address(0),
+            "PayoutEngine da duoc set roi"
+        );
+        addressPayoutEngine = _payoutEngine;
+        emit PayoutEngineSet(_payoutEngine);
+    }
+
+    function payOut(
+        uint256 policyId,
+        address recipient,
+        uint256 amount
+    ) external onlyPayoutEngine nonReentrant {
+        require(lockedAmount[policyId] == amount, "So tien khong khop khoa");
+        lockedAmount[policyId] = 0;
+        totalLocked -= amount;
+        totalDeposited -= amount;
+        (bool success, ) = recipient.call{value: amount}("");
+        require(success, "Gui eth that bai");
     }
 }
