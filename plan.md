@@ -44,7 +44,7 @@ Dựng khung Hardhat, viết xong `PolicyManager.sol` và `LiquidityPool.sol` �
 
 ### Mục tiêu
 Có luồng end-to-end chạy được ở local: mua policy → giả lập oracle báo dữ liệu → tự động payout đúng người, đúng số tiền.
-
+b 
 ### Việc cần làm
 - [ ] Viết `MockWeatherOracle.sol` implement `IWeatherOracle`: `setWeatherData()`, `getWeatherData()`
 - [ ] Viết `PayoutEngine.sol`: `checkAndPayout()`, `isThresholdMet()`
