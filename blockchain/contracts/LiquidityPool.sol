@@ -16,6 +16,7 @@ contract LiquidityPool is Ownable, Pausable, ReentrancyGuard {
     event LiquidityAdded(address indexed provider, uint256 amount);
     event LiquidityWithdrawn(address indexed provider, uint256 amount);
     event PolicyManagerSet(address indexed policyManager);
+    event PolicyRefunded(uint256 indexed policyId, address indexed to, uint256 refundAmount, uint256 unlockedCoverage); // MỚI
     constructor() Ownable(msg.sender) {}
 
     modifier onlyPolicyManager() {
@@ -124,5 +125,26 @@ contract LiquidityPool is Ownable, Pausable, ReentrancyGuard {
         totalDeposited -= amount;
         (bool success, ) = recipient.call{value: amount}("");
         require(success, "Gui eth that bai");
+    }
+
+    function refundAndUnlock(
+        uint256 policyId,
+        address to,
+        uint256 refundAmount
+    ) external onlyPolicyManager whenNotPaused nonReentrant {
+        uint256 locked = lockedAmount[policyId];
+        require(locked > 0, "Policy chua duoc khoa hoac da xu ly");
+
+        lockedAmount[policyId] = 0;
+        totalLocked -= locked;
+
+        if (refundAmount > 0) {
+            require(refundAmount <= totalDeposited, "Refund vuot qua deposited");
+            totalDeposited -= refundAmount;
+            (bool success, ) = to.call{value: refundAmount}("");
+            require(success, "Gui eth that bai");
+        }
+
+        emit PolicyRefunded(policyId, to, refundAmount, locked);
     }
 }

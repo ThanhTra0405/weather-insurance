@@ -9,7 +9,11 @@ import "../interfaces/IWeatherOracle.sol";
 import "./PolicyManager.sol";
 
 interface ILiquidityPoolPayout {
-    function payOut(uint256 policyId, address recipient, uint256 amount) external;
+    function payOut(
+        uint256 policyId,
+        address recipient,
+        uint256 amount
+    ) external;
 }
 
 contract PayoutEngine is Ownable, Pausable, ReentrancyGuard {
@@ -17,10 +21,18 @@ contract PayoutEngine is Ownable, Pausable, ReentrancyGuard {
     ILiquidityPoolPayout public liquidityPool;
     IWeatherOracle public oracle;
 
-    event PayoutTriggered(uint256 indexed policyId, address indexed holder, uint256 amount);
+    event PayoutTriggered(
+        uint256 indexed policyId,
+        address indexed holder,
+        uint256 amount
+    );
     event OracleSet(address indexed oracle);
 
-    constructor(address _policyManager, address _liquidityPool, address _oracle) Ownable(msg.sender) {
+    constructor(
+        address _policyManager,
+        address _liquidityPool,
+        address _oracle
+    ) Ownable(msg.sender) {
         require(_policyManager != address(0), "policyManager = zero address");
         require(_liquidityPool != address(0), "liquidityPool = zero address");
         require(_oracle != address(0), "oracle = zero address");
@@ -31,16 +43,8 @@ contract PayoutEngine is Ownable, Pausable, ReentrancyGuard {
 
     function isThresholdMet(uint256 policyId) public view returns (bool) {
         PolicyManager.Policy memory pol = policyManager.getPolicy(policyId);
-        (
-            ,
-            ,
-            uint8 perilType,
-            uint256 threshold,
-            ,
-            ,
-            ,
-
-        ) = policyManager.products(pol.productId);
+        (, , uint8 perilType, uint256 threshold, , , , ) = policyManager
+            .products(pol.productId);
 
         (uint256 value, uint256 ts) = oracle.getWeatherData(pol.regionId);
         if (ts < pol.startTime) return false;
@@ -54,12 +58,13 @@ contract PayoutEngine is Ownable, Pausable, ReentrancyGuard {
         }
     }
 
-    function checkAndPayout(uint256 policyId) external whenNotPaused nonReentrant {
+    function checkAndPayout(
+        uint256 policyId
+    ) external whenNotPaused nonReentrant {
         PolicyManager.Policy memory pol = policyManager.getPolicy(policyId);
         require(
-            pol.status != PolicyManager.PolicyStatus.PaidOut &&
-            pol.status != PolicyManager.PolicyStatus.Closed,
-            "Da dong"
+            pol.status == PolicyManager.PolicyStatus.Active,
+            "Policy chua active hoac da dong"
         );
         require(block.timestamp <= pol.endTime, "Policy het han");
 

@@ -11,21 +11,16 @@ describe("PolicyManager", function () {
     async function deployFixture() {
         const [owner, farmer, otherLp] = await ethers.getSigners();
 
-        // Lần này deploy LiquidityPool THẬT, không giả nữa —
-        // vì test PolicyManager cần luồng gọi chéo sang pool chạy đúng thật sự
         const LiquidityPool = await ethers.getContractFactory("LiquidityPool");
-        // deploy tạm với owner làm policy manager giữ chỗ, sửa lại ngay dưới
-
         const pool = await LiquidityPool.deploy();
         await pool.waitForDeployment();
 
         const PolicyManager = await ethers.getContractFactory("PolicyManager");
         const policyManager = await PolicyManager.deploy(await pool.getAddress());
 
-        // pool.addressPolicyManager set 1 lần ở constructor, không có hàm sửa lại
-        // -> cách đúng là deploy PolicyManager trước khi biết địa chỉ, nhưng vì
-        // LiquidityPool cần deploy trước (PolicyManager cần địa chỉ pool)
-        // nên đây là giới hạn cần biết: constructor 2 bên đang phụ thuộc vòng nhau
+        // FIX: trỏ LiquidityPool về đúng địa chỉ PolicyManager thật, nếu không mọi
+        // lockCoverage/depositPremium gọi từ PolicyManager sẽ revert onlyPolicyManager
+        await pool.connect(owner).setPolicyManager(await policyManager.getAddress());
 
         return { pool, policyManager, owner, farmer, otherLp };
     }
