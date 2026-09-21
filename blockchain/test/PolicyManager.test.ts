@@ -3,7 +3,6 @@ import { network } from "hardhat";
 
 const { ethers } = await network.connect();
 
-// Toạ độ Cần Thơ, nhân 1e6 theo đúng quy ước trong PolicyManager
 const VALID_LAT = 10_045_000;
 const VALID_LNG = 105_746_000;
 
@@ -18,15 +17,11 @@ describe("PolicyManager", function () {
         const PolicyManager = await ethers.getContractFactory("PolicyManager");
         const policyManager = await PolicyManager.deploy(await pool.getAddress());
 
-        // FIX: trỏ LiquidityPool về đúng địa chỉ PolicyManager thật, nếu không mọi
-        // lockCoverage/depositPremium gọi từ PolicyManager sẽ revert onlyPolicyManager
         await pool.connect(owner).setPolicyManager(await policyManager.getAddress());
 
         return { pool, policyManager, owner, farmer, otherLp };
     }
 
-    // Vì vướng vòng phụ thuộc constructor ở trên, viết riêng 1 fixture
-    // seed sẵn 1 product để mấy test buyPolicy dùng chung
     async function withProductFixture() {
         const base = await deployFixture();
         const premium = ethers.parseEther("0.1");
@@ -60,11 +55,6 @@ describe("PolicyManager", function () {
         it("mua thành công, trừ đúng premium, pool nhận đúng tiền", async function () {
             const { policyManager, pool, farmer, premium, coverage, productId } =
                 await withProductFixture();
-
-            // Note quan trọng: constructor pool đang trỏ addressPolicyManager = owner
-            // (do vòng phụ thuộc ở trên), nên lockCoverage/depositPremium gọi từ
-            // policyManager thật sẽ FAIL onlyPolicyManager -> cần sửa lại constructor
-            // hoặc thêm setter trước khi test này chạy được thật. Xem ghi chú cuối bài.
 
             await expect(
                 policyManager.connect(farmer).buyPolicy(productId, VALID_LAT, VALID_LNG, {
@@ -113,14 +103,71 @@ describe("PolicyManager", function () {
 
         it("revert nếu pool không đủ vốn khả dụng (solvency check)", async function () {
             const { policyManager, farmer, premium, productId } = await withProductFixture();
-            // KHÔNG có LP nào góp vốn cả -> pool.availableLiquidity() = 0
-            // trong khi coverage = 1 ETH -> phải revert
 
             await expect(
                 policyManager.connect(farmer).buyPolicy(productId, VALID_LAT, VALID_LNG, {
                     value: premium,
                 })
             ).to.be.revertedWith("Pool khong du von");
+        });
+    });
+
+    describe("verifyPolicy", function () {
+        async function pendingPolicyFixture() {
+            const base = await withProductFixture();
+            const [, , , verifierSigner] = await ethers.getSigners();
+
+            await base.pool.connect(base.otherLp).provideLiquidity({ value: ethers.parseEther("10") });
+
+            await base.policyManager.connect(base.owner).setVerifier(verifierSigner.address);
+            await base.policyManager
+                .connect(base.farmer)
+                .buyPolicy(base.productId, VALID_LAT, VALID_LNG, { value: base.premium });
+            return { ...base, verifierSigner, policyId: 1n };
+        }
+
+        it("verifier approve -> status chuyen Active", async function () {
+            const { policyManager, verifierSigner, policyId } = await pendingPolicyFixture();
+
+            await policyManager.connect(verifierSigner).verifyPolicy(policyId, true);
+            const policy = await policyManager.getPolicy(policyId);
+            expect(policy.status).to.equal(1n); // Active
+        });
+
+        it("verifier reject -> status Closed, hoan premium, unlock coverage", async function () {
+            const { policyManager, pool, farmer, verifierSigner, policyId, premium } =
+                await pendingPolicyFixture();
+
+            await expect(
+                policyManager.connect(verifierSigner).verifyPolicy(policyId, false)
+            ).to.changeEtherBalance(ethers, farmer, premium);
+
+            const policy = await policyManager.getPolicy(policyId);
+            expect(policy.status).to.equal(3n); // Closed
+            expect(await pool.lockedAmount(policyId)).to.equal(0n);
+        });
+
+        it("non-verifier goi verifyPolicy -> revert", async function () {
+            const { policyManager, farmer, policyId } = await pendingPolicyFixture();
+            await expect(
+                policyManager.connect(farmer).verifyPolicy(policyId, true)
+            ).to.be.revertedWith("Khong co quyen xac minh");
+        });
+
+        it("goi verifyPolicy 2 lan -> revert", async function () {
+            const { policyManager, verifierSigner, policyId } = await pendingPolicyFixture();
+            await policyManager.connect(verifierSigner).verifyPolicy(policyId, true);
+
+            await expect(
+                policyManager.connect(verifierSigner).verifyPolicy(policyId, true)
+            ).to.be.revertedWith("Policy khong o trang thai cho xac minh");
+        });
+
+        it("setVerifier chi owner goi duoc", async function () {
+            const { policyManager, farmer } = await withProductFixture();
+            await expect(
+                policyManager.connect(farmer).setVerifier(farmer.address)
+            ).to.be.revertedWithCustomError(policyManager, "OwnableUnauthorizedAccount");
         });
     });
 });

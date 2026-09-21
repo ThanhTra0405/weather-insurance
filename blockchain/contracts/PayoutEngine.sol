@@ -70,6 +70,14 @@ contract PayoutEngine is Ownable, Pausable, ReentrancyGuard {
 
         (, uint256 ts) = oracle.getWeatherData(pol.regionId);
         require(ts >= pol.startTime, "Du lieu qua cu");
+
+        // MỚI: chống mua policy sau khi đã biết trước thiên tai
+        uint256 cooling = policyManager.coolingOffPeriod();
+        require(
+            ts >= pol.startTime + cooling,
+            "Con trong thoi gian cooling-off"
+        );
+
         require(isThresholdMet(policyId), "Chua dat nguong");
 
         liquidityPool.payOut(policyId, pol.holder, pol.coverageAmount);

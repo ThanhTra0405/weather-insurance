@@ -11,7 +11,11 @@ interface ILiquidityPool {
     function depositPremium() external payable;
     // MỚI — cần thêm hàm này vào LiquidityPool.sol thật:
     // gửi trả lại premium + mở khoá coverage khi policy bị từ chối xác minh
-    function refundAndUnlock(uint256 policyId, address to, uint256 amount) external;
+    function refundAndUnlock(
+        uint256 policyId,
+        address to,
+        uint256 amount
+    ) external;
 }
 
 contract PolicyManager is Ownable, Pausable, ReentrancyGuard {
@@ -62,11 +66,18 @@ contract PolicyManager is Ownable, Pausable, ReentrancyGuard {
     uint256 public nextProductId = 1;
     uint256 public nextPolicyId = 1;
 
+    uint256 public coolingOffPeriod;
+
     mapping(uint256 => PolicyProduct) public products;
     mapping(uint256 => Policy) public policies;
     mapping(address => uint256[]) public policiesOf;
-
-    event PolicyProductCreated(uint256 indexed productId, string name, uint256 premium, uint256 coverageAmount);
+    event CoolingOffPeriodSet(uint256 seconds_);
+    event PolicyProductCreated(
+        uint256 indexed productId,
+        string name,
+        uint256 premium,
+        uint256 coverageAmount
+    );
     event PolicyCreated(
         uint256 indexed policyId,
         uint256 indexed productId,
@@ -91,7 +102,10 @@ contract PolicyManager is Ownable, Pausable, ReentrancyGuard {
     }
 
     modifier onlyVerifier() {
-        require(msg.sender == verifier || msg.sender == owner(), "Khong co quyen xac minh");
+        require(
+            msg.sender == verifier || msg.sender == owner(),
+            "Khong co quyen xac minh"
+        );
         _;
     }
 
@@ -103,7 +117,10 @@ contract PolicyManager is Ownable, Pausable, ReentrancyGuard {
     // ===== Tính regionId ON-CHAIN — thay vì nhận từ tham số =====
     // Y HỆT công thức trong region.md: làm tròn về lưới 0.2 độ, pack (lat,lng) int256, keccak256.
     // Chỉ hỗ trợ toạ độ dương (đúng scope đồ án — toàn bộ lãnh thổ VN có lat/lng dương).
-    function computeRegionId(int256 lat, int256 lng) public pure returns (bytes32) {
+    function computeRegionId(
+        int256 lat,
+        int256 lng
+    ) public pure returns (bytes32) {
         int256 roundedLat = _roundToGrid(lat);
         int256 roundedLng = _roundToGrid(lng);
         return keccak256(abi.encodePacked(roundedLat, roundedLng));
@@ -126,9 +143,15 @@ contract PolicyManager is Ownable, Pausable, ReentrancyGuard {
         require(bytes(name).length > 0, "ten rong");
         require(perilType <= 2, "peril khong hop le");
         require(threshold > 0, "threshold phai lon hon 0");
-        require(durationDays > 0 && durationDays <= 365, "thoi gian khong hop le");
+        require(
+            durationDays > 0 && durationDays <= 365,
+            "thoi gian khong hop le"
+        );
         require(premium > 0, "phi phai dong lon hon 0");
-        require(coverageAmount > premium, "so tien boi thuong phai lon hon phi phai dong");
+        require(
+            coverageAmount > premium,
+            "so tien boi thuong phai lon hon phi phai dong"
+        );
 
         productId = nextProductId++;
         products[productId] = PolicyProduct({
@@ -156,7 +179,10 @@ contract PolicyManager is Ownable, Pausable, ReentrancyGuard {
         require(lat >= MIN_LAT && lat <= MAX_LAT, "lat ngoai pham vi");
         require(lng >= MIN_LNG && lng <= MAX_LNG, "lng ngoai pham vi");
         require(msg.value == p.premium, "Premium khong dung");
-        require(liquidityPool.availableLiquidity() >= p.coverageAmount, "Pool khong du von");
+        require(
+            liquidityPool.availableLiquidity() >= p.coverageAmount,
+            "Pool khong du von"
+        );
 
         bytes32 regionId = computeRegionId(lat, lng);
 
@@ -180,16 +206,29 @@ contract PolicyManager is Ownable, Pausable, ReentrancyGuard {
         liquidityPool.depositPremium{value: msg.value}();
 
         emit PolicyCreated(
-            policyId, productId, msg.sender, lat, lng, regionId,
-            msg.value, p.coverageAmount, block.timestamp + p.durationDays * 1 days
+            policyId,
+            productId,
+            msg.sender,
+            lat,
+            lng,
+            regionId,
+            msg.value,
+            p.coverageAmount,
+            block.timestamp + p.durationDays * 1 days
         );
     }
 
     // ===== MỚI: cơ chế xác minh (tuần 3) =====
-    function verifyPolicy(uint256 policyId, bool approved) external onlyVerifier whenNotPaused nonReentrant {
+    function verifyPolicy(
+        uint256 policyId,
+        bool approved
+    ) external onlyVerifier whenNotPaused nonReentrant {
         Policy storage pol = policies[policyId];
         require(pol.id != 0, "Policy khong ton tai");
-        require(pol.status == PolicyStatus.PendingVerification, "Policy khong o trang thai cho xac minh");
+        require(
+            pol.status == PolicyStatus.PendingVerification,
+            "Policy khong o trang thai cho xac minh"
+        );
 
         if (approved) {
             pol.status = PolicyStatus.Active;
@@ -217,7 +256,9 @@ contract PolicyManager is Ownable, Pausable, ReentrancyGuard {
         return policies[policyId];
     }
 
-    function getPoliciesOf(address holder) external view returns (uint256[] memory) {
+    function getPoliciesOf(
+        address holder
+    ) external view returns (uint256[] memory) {
         return policiesOf[holder];
     }
 
@@ -229,10 +270,16 @@ contract PolicyManager is Ownable, Pausable, ReentrancyGuard {
         _unpause();
     }
 
-    function setProductActive(uint256 productId, bool active) external onlyOwner {
+    function setProductActive(
+        uint256 productId,
+        bool active
+    ) external onlyOwner {
         require(products[productId].id != 0, "Product khong ton tai");
         products[productId].active = active;
-        emit ProductStatusChanged(products[productId].id, products[productId].active);
+        emit ProductStatusChanged(
+            products[productId].id,
+            products[productId].active
+        );
     }
 
     function setLiquidityPool(address newPool) external onlyOwner whenPaused {
@@ -250,5 +297,10 @@ contract PolicyManager is Ownable, Pausable, ReentrancyGuard {
     function markPaidOut(uint256 policyId) external onlyPayoutEngine {
         policies[policyId].status = PolicyStatus.PaidOut;
         emit PayoutMarked(policyId);
+    }
+
+    function setCoolingOffPeriod(uint256 seconds_) external onlyOwner {
+        coolingOffPeriod = seconds_;
+        emit CoolingOffPeriodSet(seconds_);
     }
 }
