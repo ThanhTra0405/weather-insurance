@@ -7,10 +7,14 @@ import { PERIL_DROUGHT } from "../helpers/perilType.js";
 const { ethers, networkHelpers } = await network.connect();
 const { loadFixture, time } = networkHelpers;
 
+async function fixtureDeployAll() {
+    return deployAllFixture(ethers);
+}
+
 describe("FullFlow integration", function () {
     it("luong day du: LP gop von -> mua -> verify -> oracle -> payout", async function () {
         const { pool, policyManager, payoutEngine, oracle, owner, farmer, lp1, verifier } =
-            await loadFixture(() => deployAllFixture(ethers));
+            await loadFixture(fixtureDeployAll);
 
         await pool.connect(lp1).provideLiquidity({ value: ethers.parseEther("10") });
         await policyManager.connect(owner).createPolicyProduct(
@@ -37,7 +41,7 @@ describe("FullFlow integration", function () {
 
     it("nhanh reject: verify tu choi -> khong payout duoc, premium hoan lai", async function () {
         const { pool, policyManager, payoutEngine, owner, farmer, lp1, verifier } =
-            await loadFixture(() => deployAllFixture(ethers));
+            await loadFixture(fixtureDeployAll);
 
         await pool.connect(lp1).provideLiquidity({ value: ethers.parseEther("10") });
         await policyManager.connect(owner).createPolicyProduct(
@@ -56,7 +60,7 @@ describe("FullFlow integration", function () {
 
     it("nhanh het han khong dat nguong: khong payout, premium thuoc pool", async function () {
         const { pool, policyManager, payoutEngine, owner, farmer, lp1, verifier } =
-            await loadFixture(() => deployAllFixture(ethers));
+            await loadFixture(fixtureDeployAll);
 
         await pool.connect(lp1).provideLiquidity({ value: ethers.parseEther("10") });
         await policyManager.connect(owner).createPolicyProduct(

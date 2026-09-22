@@ -1,0 +1,12 @@
+[
+  { "regionId": "can-tho", "lat": 10.0452, "lng": 105.7469 },
+  { "regionId": "ha-noi", "lat": 21.0278, "lng": 105.8342 },
+  { "regionId": "tp-hcm", "lat": 10.7769, "lng": 106.7009 },
+  { "regionId": "da-nang", "lat": 16.0544, "lng": 108.2022 },
+  { "regionId": "an-giang", "lat": 10.5216, "lng": 105.1259 },
+  { "regionId": "dong-thap", "lat": 10.4938, "lng": 105.6882 },
+  { "regionId": "tien-giang", "lat": 10.4493, "lng": 106.3420 },
+  { "regionId": "hai-phong", "lat": 20.8449, "lng": 106.6881 },
+  { "regionId": "nghe-an", "lat": 18.6796, "lng": 105.6813 },
+  { "regionId": "khanh-hoa", "lat": 12.2585, "lng": 109.0526 }
+]

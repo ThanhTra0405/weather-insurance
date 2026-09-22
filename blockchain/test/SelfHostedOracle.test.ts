@@ -16,7 +16,7 @@ describe("SelfHostedOracle", function () {
         const { oracle, backend } = await deployFixture();
         const regionId = ethers.keccak256(ethers.toUtf8Bytes("test-region"));
 
-        await expect(oracle.connect(backend).submitWeatherData(regionId, 30, 1000)).to.not.be.reverted;
+        await expect(oracle.connect(backend).submitWeatherData(regionId, 30, 1000)).to.not.revert(ethers);
 
         const [value, ts] = await oracle.getWeatherData(regionId);
         expect(value).to.equal(30);

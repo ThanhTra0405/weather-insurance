@@ -72,12 +72,11 @@ describe("LiquidityPool", function () {
             const deposit = ethers.parseEther("1");
             await pool.connect(lp1).provideLiquidity({ value: deposit });
 
-            // giả lập PolicyManager khoá hết vốn cho 1 policy
             await pool.connect(fakePolicyManager).lockCoverage(1, deposit);
 
             await expect(
                 pool.connect(lp1).withdrawLiquidity(ethers.parseEther("0.1"))
-            ).to.be.revertedWith("Khong du eth");
+            ).to.be.revertedWith("Vuot von kha dung");
         });
     });
 

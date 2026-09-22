@@ -28,12 +28,7 @@ describe("PolicyManager", function () {
         const coverage = ethers.parseEther("1");
 
         await base.policyManager.connect(base.owner).createPolicyProduct(
-            "Han han Can Tho",
-            0,          // perilType
-            50,         // threshold (VD: 50mm)
-            30,         // durationDays
-            premium,
-            coverage
+            "Han han Can Tho", 0, 50, 30, premium, coverage
         );
 
         return { ...base, premium, coverage, productId: 1n };
@@ -53,13 +48,13 @@ describe("PolicyManager", function () {
 
     describe("buyPolicy", function () {
         it("mua thành công, trừ đúng premium, pool nhận đúng tiền", async function () {
-            const { policyManager, pool, farmer, premium, coverage, productId } =
+            const { policyManager, pool, farmer, otherLp, premium, coverage, productId } =
                 await withProductFixture();
 
+            await pool.connect(otherLp).provideLiquidity({ value: ethers.parseEther("10") });
+
             await expect(
-                policyManager.connect(farmer).buyPolicy(productId, VALID_LAT, VALID_LNG, {
-                    value: premium,
-                })
+                policyManager.connect(farmer).buyPolicy(productId, VALID_LAT, VALID_LNG, { value: premium })
             ).to.changeEtherBalance(ethers, farmer, -premium);
 
             const policy = await policyManager.getPolicy(1);
@@ -68,18 +63,20 @@ describe("PolicyManager", function () {
         });
 
         it("revert nếu trả sai số premium", async function () {
-            const { policyManager, farmer, productId } = await withProductFixture();
+            const { policyManager, pool, otherLp, farmer, productId } = await withProductFixture();
+            await pool.connect(otherLp).provideLiquidity({ value: ethers.parseEther("10") });
 
             await expect(
                 policyManager.connect(farmer).buyPolicy(productId, VALID_LAT, VALID_LNG, {
-                    value: ethers.parseEther("0.05"), // sai, đúng phải 0.1
+                    value: ethers.parseEther("0.05"),
                 })
             ).to.be.revertedWith("Premium khong dung");
         });
 
         it("revert nếu toạ độ ngoài phạm vi Việt Nam", async function () {
-            const { policyManager, farmer, premium, productId } = await withProductFixture();
-            const invalidLat = 40_000_000; // ngoài lãnh thổ VN
+            const { policyManager, pool, otherLp, farmer, premium, productId } = await withProductFixture();
+            await pool.connect(otherLp).provideLiquidity({ value: ethers.parseEther("10") });
+            const invalidLat = 40_000_000;
 
             await expect(
                 policyManager.connect(farmer).buyPolicy(productId, invalidLat, VALID_LNG, {
@@ -89,8 +86,9 @@ describe("PolicyManager", function () {
         });
 
         it("revert nếu đang pause", async function () {
-            const { policyManager, owner, farmer, premium, productId } =
+            const { policyManager, pool, otherLp, owner, farmer, premium, productId } =
                 await withProductFixture();
+            await pool.connect(otherLp).provideLiquidity({ value: ethers.parseEther("10") });
 
             await policyManager.connect(owner).pause();
 
@@ -101,6 +99,7 @@ describe("PolicyManager", function () {
             ).to.be.revertedWithCustomError(policyManager, "EnforcedPause");
         });
 
+        // Test này KHÔNG seed liquidity — đúng ý nghĩa test solvency check
         it("revert nếu pool không đủ vốn khả dụng (solvency check)", async function () {
             const { policyManager, farmer, premium, productId } = await withProductFixture();
 
