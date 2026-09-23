@@ -7,27 +7,27 @@
   </div>
 
   @if (loadError(); as err) {
-    <p class="error-text">{{ err }}</p>
+  <p class="error-text">{{ err }}</p>
   }
 
   @if (policies().length === 0 && !isLoading()) {
-    <div class="card empty-state">
-      <p>Bạn chưa có policy nào.</p>
-      <a routerLink="/buy-policy" class="btn btn-primary">Mua bảo hiểm ngay</a>
-    </div>
+  <div class="card empty-state">
+    <p>Bạn chưa có policy nào.</p>
+    <a routerLink="/buy-policy" class="btn btn-primary">Mua bảo hiểm ngay</a>
+  </div>
   }
 
   <div class="policy-list">
     @for (policy of policies(); track policy.id) {
-      <div class="card policy-card">
-        <div class="policy-card-top">
-          <span class="policy-id">Policy #{{ policy.id }}</span>
-          <span class="badge" [class]="statusClass(policy.status)">{{ statusLabel(policy.status) }}</span>
-        </div>
-        <p class="policy-coverage">
-          Bồi thường: {{ policy.coverageAmount / 1000000000000000000n }} ETH
-        </p>
+    <div class="card policy-card">
+      <div class="policy-card-top">
+        <span class="policy-id">Policy #{{ policy.id }}</span>
+        <span class="badge" [class]="statusClass(policy.status)">{{ statusLabel(policy.status) }}</span>
       </div>
+      <p class="policy-coverage">
+        Bồi thường: {{ formatEth(policy.coverageAmount) }} ETH
+      </p>
+    </div>
     }
   </div>
 </div>

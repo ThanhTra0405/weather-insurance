@@ -2,6 +2,7 @@ import { Component, inject, signal, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Web3Service } from '../../services/web3.service';
 import { ContractService } from '../../services/contract.service';
+import { formatEther } from 'ethers';
 
 interface PolicyView {
   id: bigint;
@@ -67,5 +68,9 @@ export class Dashboard implements OnInit {
 
   statusClass(status: number): string {
     return STATUS_CLASSES[status] ?? 'badge-closed';
+  }
+
+  formatEth(wei: bigint): string {
+    return formatEther(wei);
   }
 }
