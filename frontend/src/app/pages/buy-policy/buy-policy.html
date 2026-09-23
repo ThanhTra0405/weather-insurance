@@ -1,0 +1,51 @@
+<div class="container buy-policy-page">
+  <h1>Mua bảo hiểm thời tiết</h1>
+
+  <div class="card gps-card">
+    <h2>1. Xác định vị trí ruộng</h2>
+    <p class="hint">Đứng tại ruộng và bấm nút bên dưới để lấy toạ độ GPS.</p>
+
+    <button class="btn btn-outline" (click)="getGps()" [disabled]="isLoadingGps()">
+      {{ isLoadingGps() ? 'Đang lấy vị trí...' : '📍 Lấy vị trí hiện tại' }}
+    </button>
+
+    @if (gpsError(); as err) {
+      <p class="error-text">{{ err }}</p>
+    }
+
+    @if (lat() !== null && lng() !== null) {
+      <div class="gps-result">
+        <span class="badge badge-active">Đã lấy vị trí</span>
+        <p>Lat: {{ lat() | number:'1.6-6' }} — Lng: {{ lng() | number:'1.6-6' }}</p>
+        @if (gpsAccuracy() !== null) {
+          <p class="hint">Độ chính xác: ~{{ gpsAccuracy() | number:'1.0-0' }}m</p>
+        }
+      </div>
+    }
+  </div>
+
+  <div class="card form-card">
+    <h2>2. Thông tin sản phẩm</h2>
+
+    <label for="productId">Mã sản phẩm bảo hiểm</label>
+    <input id="productId" type="number" [ngModel]="productId()" (ngModelChange)="productId.set($event)" />
+
+    <label for="premium">Phí bảo hiểm (ETH)</label>
+    <input id="premium" type="text" [ngModel]="premiumEth()" (ngModelChange)="premiumEth.set($event)" />
+
+    <button
+      class="btn btn-primary submit-btn"
+      (click)="submit()"
+      [disabled]="isSubmitting() || lat() === null"
+    >
+      {{ isSubmitting() ? 'Đang xử lý...' : 'Mua bảo hiểm' }}
+    </button>
+
+    @if (submitError(); as err) {
+      <p class="error-text">{{ err }}</p>
+    }
+    @if (submitSuccess()) {
+      <p class="success-text">✅ Mua bảo hiểm thành công! Chờ admin xác minh hồ sơ.</p>
+    }
+  </div>
+</div>

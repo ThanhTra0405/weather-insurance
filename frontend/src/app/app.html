@@ -1,0 +1,16 @@
+<header class="app-header">
+  <div class="container header-inner">
+    <a routerLink="/dashboard" class="logo">🌾 Bảo hiểm thời tiết</a>
+
+    <nav class="nav-links">
+      <a routerLink="/dashboard" routerLinkActive="active">Dashboard</a>
+      <a routerLink="/buy-policy" routerLinkActive="active">Mua bảo hiểm</a>
+    </nav>
+
+    <app-connect-wallet-button />
+  </div>
+</header>
+
+<main>
+  <router-outlet />
+</main>

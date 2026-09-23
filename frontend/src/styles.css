@@ -1,0 +1,182 @@
+/* ===== Bảng màu chung — trắng & xanh lá, dùng CSS variables ===== */
+:root {
+  --color-primary: #16a34a;        /* xanh lá chính */
+  --color-primary-dark: #15803d;   /* xanh lá đậm — hover/active */
+  --color-primary-light: #dcfce7;  /* xanh lá nhạt — background badge/nhấn nhẹ */
+  --color-accent: #22c55e;         /* xanh lá tươi — nút phụ, icon */
+
+  --color-bg: #ffffff;             /* nền chính */
+  --color-bg-secondary: #f0fdf4;   /* nền phụ, hơi ngả xanh */
+  --color-surface: #ffffff;        /* nền card/panel */
+
+  --color-text: #14532d;           /* chữ chính — xanh lá rất đậm, dễ đọc trên nền trắng */
+  --color-text-secondary: #4b5563; /* chữ phụ — xám trung tính */
+  --color-text-muted: #9ca3af;     /* chữ mờ, ghi chú */
+
+  --color-border: #d1fae5;         /* viền nhạt */
+  --color-error: #dc2626;
+  --color-warning: #f59e0b;
+  --color-success: var(--color-primary);
+
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+
+  --shadow-sm: 0 1px 2px rgba(22, 163, 74, 0.06);
+  --shadow-md: 0 4px 12px rgba(22, 163, 74, 0.1);
+
+  --font-family: 'Segoe UI', 'Inter', system-ui, -apple-system, sans-serif;
+
+  --header-height: 64px;
+  --container-max-width: 1080px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  font-family: var(--font-family);
+  background-color: var(--color-bg);
+  color: var(--color-text);
+}
+
+body {
+  -webkit-font-smoothing: antialiased;
+}
+
+a {
+  color: var(--color-primary);
+  text-decoration: none;
+}
+
+a:hover {
+  color: var(--color-primary-dark);
+}
+
+/* ===== Button dùng chung ===== */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 20px;
+  border-radius: var(--radius-sm);
+  border: none;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.15s ease, transform 0.05s ease;
+}
+
+.btn:active {
+  transform: scale(0.98);
+}
+
+.btn-primary {
+  background-color: var(--color-primary);
+  color: #ffffff;
+}
+
+.btn-primary:hover {
+  background-color: var(--color-primary-dark);
+}
+
+.btn-outline {
+  background-color: transparent;
+  color: var(--color-primary);
+  border: 1.5px solid var(--color-primary);
+}
+
+.btn-outline:hover {
+  background-color: var(--color-primary-light);
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ===== Card dùng chung ===== */
+.card {
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+  padding: 20px;
+}
+
+/* ===== Badge trạng thái policy ===== */
+.badge {
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.badge-pending {
+  background-color: #fef3c7;
+  color: #92400e;
+}
+
+.badge-active {
+  background-color: var(--color-primary-light);
+  color: var(--color-primary-dark);
+}
+
+.badge-paid {
+  background-color: #dbeafe;
+  color: #1e40af;
+}
+
+.badge-closed {
+  background-color: #f3f4f6;
+  color: #6b7280;
+}
+
+/* ===== Container responsive ===== */
+.container {
+  max-width: var(--container-max-width);
+  margin: 0 auto;
+  padding: 0 16px;
+}
+
+/* ===== Input dùng chung ===== */
+input, select, textarea {
+  font-family: inherit;
+  font-size: 15px;
+  padding: 10px 12px;
+  border: 1.5px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background-color: var(--color-bg);
+  color: var(--color-text);
+  width: 100%;
+}
+
+input:focus, select:focus, textarea:focus {
+  outline: none;
+  border-color: var(--color-primary);
+}
+
+label {
+  display: block;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  margin-bottom: 6px;
+}
+
+/* ===== Responsive breakpoints dùng chung ===== */
+@media (max-width: 640px) {
+  .container {
+    padding: 0 12px;
+  }
+  .card {
+    padding: 16px;
+    border-radius: var(--radius-sm);
+  }
+}

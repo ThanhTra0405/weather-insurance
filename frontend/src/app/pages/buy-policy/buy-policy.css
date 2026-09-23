@@ -1,0 +1,71 @@
+.buy-policy-page {
+  padding: 24px 0 60px;
+  max-width: 600px;
+}
+
+.buy-policy-page h1 {
+  color: var(--color-text);
+  font-size: 24px;
+  margin-bottom: 20px;
+}
+
+.card {
+  margin-bottom: 16px;
+}
+
+.card h2 {
+  font-size: 17px;
+  color: var(--color-primary-dark);
+  margin: 0 0 8px;
+}
+
+.hint {
+  color: var(--color-text-muted);
+  font-size: 13px;
+  margin: 4px 0 12px;
+}
+
+.gps-result {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--color-border);
+}
+
+.gps-result p {
+  font-size: 14px;
+  margin: 6px 0;
+}
+
+.form-card label {
+  margin-top: 14px;
+}
+
+.form-card label:first-of-type {
+  margin-top: 0;
+}
+
+.submit-btn {
+  width: 100%;
+  margin-top: 20px;
+  padding: 14px;
+  font-size: 16px;
+}
+
+.error-text {
+  color: var(--color-error);
+  font-size: 13px;
+  margin-top: 10px;
+}
+
+.success-text {
+  color: var(--color-primary-dark);
+  font-size: 14px;
+  margin-top: 10px;
+  font-weight: 600;
+}
+
+@media (max-width: 640px) {
+  .buy-policy-page {
+    padding: 16px 0 40px;
+  }
+}

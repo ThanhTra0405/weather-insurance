@@ -1,0 +1,33 @@
+<div class="container dashboard-page">
+  <div class="dashboard-header">
+    <h1>Policy của tôi</h1>
+    <button class="btn btn-outline" (click)="loadPolicies()" [disabled]="isLoading()">
+      {{ isLoading() ? 'Đang tải...' : '↻ Tải lại' }}
+    </button>
+  </div>
+
+  @if (loadError(); as err) {
+    <p class="error-text">{{ err }}</p>
+  }
+
+  @if (policies().length === 0 && !isLoading()) {
+    <div class="card empty-state">
+      <p>Bạn chưa có policy nào.</p>
+      <a routerLink="/buy-policy" class="btn btn-primary">Mua bảo hiểm ngay</a>
+    </div>
+  }
+
+  <div class="policy-list">
+    @for (policy of policies(); track policy.id) {
+      <div class="card policy-card">
+        <div class="policy-card-top">
+          <span class="policy-id">Policy #{{ policy.id }}</span>
+          <span class="badge" [class]="statusClass(policy.status)">{{ statusLabel(policy.status) }}</span>
+        </div>
+        <p class="policy-coverage">
+          Bồi thường: {{ policy.coverageAmount / 1000000000000000000n }} ETH
+        </p>
+      </div>
+    }
+  </div>
+</div>
