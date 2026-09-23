@@ -1,0 +1,13 @@
+.admin-page { padding: 24px 0 60px; }
+.login-card { max-width: 360px; margin: 60px auto; text-align: center; }
+.login-card h1 { font-size: 20px; margin-bottom: 16px; }
+.login-card button { width: 100%; margin-top: 14px; }
+.admin-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 12px; }
+.admin-actions { display: flex; gap: 8px; }
+.policy-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 14px; }
+.policy-top { display: flex; justify-content: space-between; margin-bottom: 8px; }
+.policy-id { font-weight: 700; color: var(--color-primary-dark); }
+.review-actions { display: flex; gap: 8px; margin-top: 12px; }
+.review-actions .btn { flex: 1; }
+.error-text { color: var(--color-error); margin-bottom: 16px; }
+@media (max-width: 640px) { .policy-list { grid-template-columns: 1fr; } }

@@ -1,0 +1,51 @@
+<div class="container admin-page">
+  @if (!isLoggedIn) {
+    <div class="card login-card">
+      <h1>Đăng nhập Admin</h1>
+      <label for="key">Admin key</label>
+      <input id="key" type="password" [ngModel]="keyInput()" (ngModelChange)="keyInput.set($event)" />
+      <button class="btn btn-primary" (click)="login()">Đăng nhập</button>
+    </div>
+  } @else {
+    <div class="admin-header">
+      <h1>Duyệt hồ sơ Policy</h1>
+      <div class="admin-actions">
+        <button class="btn btn-outline" (click)="load()" [disabled]="isLoading()">↻ Tải lại</button>
+        <button class="btn btn-outline" (click)="logout()">Đăng xuất</button>
+      </div>
+    </div>
+
+    @if (error(); as err) {
+      <p class="error-text">{{ err }}</p>
+    }
+
+    @if (policies().length === 0 && !isLoading()) {
+      <div class="card empty-state"><p>Không có policy nào đang chờ duyệt.</p></div>
+    }
+
+    <div class="policy-list">
+      @for (p of policies(); track p.policyId) {
+        <div class="card admin-policy-card">
+          <div class="policy-top">
+            <span class="policy-id">Policy #{{ p.policyId }}</span>
+            <span class="badge badge-pending">Chờ duyệt</span>
+          </div>
+          <p>Chủ ví: {{ p.holder }}</p>
+          <p>Toạ độ: {{ formatLatLng(p.lat) }}, {{ formatLatLng(p.lng) }}</p>
+          <div class="review-actions">
+            <button
+              class="btn btn-primary"
+              [disabled]="processingId() === p.policyId"
+              (click)="review(p.policyId, true)"
+            >Duyệt</button>
+            <button
+              class="btn btn-outline"
+              [disabled]="processingId() === p.policyId"
+              (click)="review(p.policyId, false)"
+            >Từ chối</button>
+          </div>
+        </div>
+      }
+    </div>
+  }
+</div>

@@ -5,4 +5,5 @@ export const environment = {
   policyManagerAddress: '0x...', 
   payoutEngineAddress: '0x...',
   liquidityPoolAddress: '0x...',
+  backendUrl: 'http://localhost:5083',
 };

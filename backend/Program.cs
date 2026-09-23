@@ -1,3 +1,4 @@
+using backend.Middleware;
 using backend.Repository;
 using backend.Services;
 using backend.Services.interfaces;
@@ -14,8 +15,16 @@ builder.Services.AddSingleton<IOracleSubmitter, OracleSubmitter>();
 builder.Services.AddSingleton<IPolicyManagerClient, PolicyManagerClient>();
 builder.Services.AddHostedService<OracleWorker>();
 builder.Services.AddSingleton<StationRepository>();
-var app = builder.Build();
 
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("AllowAngularDev", policy =>
+        policy.WithOrigins("http://localhost:4200").AllowAnyHeader().AllowAnyMethod());
+});
+
+var app = builder.Build();
+app.UseCors("AllowAngularDev");
+app.UseMiddleware<AdminApiKeyMiddleware>();
 app.UseHttpsRedirection();
 app.UseAuthorization();
 app.MapControllers();

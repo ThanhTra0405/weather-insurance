@@ -34,6 +34,21 @@ namespace backend.Controllers
                 return StatusCode(500, new { error = ex.Message });
             }
         }
+
+        [HttpGet("pending-policies")]
+        public async Task<IActionResult> GetPendingPolicies(CancellationToken ct)
+        {
+            try
+            {
+                var policies = await _policyManagerClient.GetPendingPoliciesAsync(ct);
+                return Ok(policies);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Loi khi lay danh sach policy cho duyet");
+                return StatusCode(500, new { error = ex.Message });
+            }
+        }
     }
 
     public record ReviewRequest(bool Approved, string? Note);
