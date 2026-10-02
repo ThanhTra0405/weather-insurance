@@ -1,0 +1,6 @@
+{
+  "DeploySelfHostedModule#LiquidityPool": "0x7Ec5cbb5bA939116A4283Cc7F41A514556eAdB62",
+  "DeploySelfHostedModule#SelfHostedOracle": "0x5a9600Eac07D931A07742C9093111Bf05e61DB90",
+  "DeploySelfHostedModule#PolicyManager": "0x6FB68f5B95d537611D1a291b3bf7df1faa08F013",
+  "DeploySelfHostedModule#PayoutEngine": "0xB43728e44937B51894D257714dB2d40cf4bAE258"
+}

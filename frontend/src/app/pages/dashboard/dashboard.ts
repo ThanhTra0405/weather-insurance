@@ -1,4 +1,4 @@
-import { Component, inject, signal, OnInit } from '@angular/core';
+import { Component, inject, signal, effect, untracked } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Web3Service } from '../../services/web3.service';
 import { ContractService } from '../../services/contract.service';
@@ -21,7 +21,7 @@ const STATUS_CLASSES = ['badge-pending', 'badge-active', 'badge-paid', 'badge-cl
   templateUrl: './dashboard.html',
   styleUrl: './dashboard.css',
 })
-export class Dashboard implements OnInit {
+export class Dashboard {
   private web3 = inject(Web3Service);
   private contractService = inject(ContractService);
 
@@ -29,10 +29,11 @@ export class Dashboard implements OnInit {
   readonly isLoading = signal(false);
   readonly loadError = signal<string | null>(null);
 
-  ngOnInit(): void {
-    if (this.web3.isConnected) {
-      this.loadPolicies();
-    }
+  constructor() {
+    // Tự tải khi ví sẵn sàng (hoặc đổi địa chỉ)
+    effect(() => {
+      if (this.web3.address()) untracked(() => this.loadPolicies());
+    });
   }
 
   async loadPolicies(): Promise<void> {
@@ -44,16 +45,17 @@ export class Dashboard implements OnInit {
 
     try {
       const ids = await this.contractService.getActivePolicies(address);
-      const results: PolicyView[] = [];
-      for (const id of ids) {
-        const p = await this.contractService.getPolicy(id);
-        results.push({
-          id,
-          status: Number(p.status),
-          coverageAmount: p.coverageAmount,
-          endTime: p.endTime,
-        });
-      }
+      const results = await Promise.all(
+        ids.map(async (id): Promise<PolicyView> => {
+          const p = await this.contractService.getPolicy(id);
+          return {
+            id,
+            status: Number(p.status),
+            coverageAmount: p.coverageAmount,
+            endTime: p.endTime,
+          };
+        })
+      );
       this.policies.set(results);
     } catch (err: any) {
       this.loadError.set(err?.message ?? 'Không tải được danh sách policy');

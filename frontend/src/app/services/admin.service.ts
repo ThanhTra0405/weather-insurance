@@ -10,6 +10,20 @@ export interface PendingPolicy {
   endTime: string;
 }
 
+export interface EvidenceMeta {
+  declaredLat: number;
+  declaredLng: number;
+  gpsAccuracy: number;
+  exifGpsPresent: boolean;
+  exifLat: number | null;
+  exifLng: number | null;
+  distanceMeters: number | null;
+  fieldPhotoHash: string;
+  documentHash: string;
+}
+
+export type EvidenceKind = 'selfie' | 'field' | 'document';
+
 @Injectable({ providedIn: 'root' })
 export class AdminService {
   readonly apiKey = signal<string | null>(sessionStorage.getItem('adminApiKey'));
@@ -30,11 +44,19 @@ export class AdminService {
     return { 'X-Admin-Key': this.apiKey() ?? '', 'Content-Type': 'application/json' };
   }
 
+  private checkAuth(res: Response): void {
+    if (res.status === 401 || res.status === 403) {
+      this.logout();
+      throw new Error('Admin key không đúng');
+    }
+  }
+
   async getPendingPolicies(): Promise<PendingPolicy[]> {
     const res = await fetch(`${this.baseUrl}/api/admin/pending-policies`, {
       headers: this.headers(),
     });
-    if (!res.ok) throw new Error('Khong lay duoc danh sach — kiem tra admin key');
+    this.checkAuth(res);
+    if (!res.ok) throw new Error('Không lấy được danh sách hồ sơ chờ duyệt');
     return res.json();
   }
 
@@ -44,6 +66,27 @@ export class AdminService {
       headers: this.headers(),
       body: JSON.stringify({ approved }),
     });
-    if (!res.ok) throw new Error('Duyet policy that bai');
+    this.checkAuth(res);
+    if (!res.ok) throw new Error('Duyệt policy thất bại');
+  }
+
+  async getEvidenceMeta(policyId: number): Promise<EvidenceMeta | null> {
+    const res = await fetch(`${this.baseUrl}/api/evidence/${policyId}/meta`, {
+      headers: this.headers(),
+    });
+    this.checkAuth(res);
+    if (res.status === 404) return null;
+    if (!res.ok) throw new Error('Không lấy được thông tin hồ sơ');
+    return res.json();
+  }
+
+  /** Trả về blob URL (gửi key qua header, không để key lên URL) */
+  async getEvidenceImage(policyId: number, kind: EvidenceKind): Promise<string> {
+    const res = await fetch(`${this.baseUrl}/api/evidence/${policyId}/${kind}`, {
+      headers: { 'X-Admin-Key': this.apiKey() ?? '' },
+    });
+    this.checkAuth(res);
+    if (!res.ok) throw new Error(`Không tải được ảnh ${kind}`);
+    return URL.createObjectURL(await res.blob());
   }
 }

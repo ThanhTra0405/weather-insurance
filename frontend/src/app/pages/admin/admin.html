@@ -32,10 +32,47 @@
           </div>
           <p>Chủ ví: {{ p.holder }}</p>
           <p>Toạ độ: {{ formatLatLng(p.lat) }}, {{ formatLatLng(p.lng) }}</p>
+
+          @if (ev(p.policyId); as e) {
+            <div class="evidence">
+              @if (e.loading) {
+                <p>Đang tải hồ sơ...</p>
+              } @else if (e.error) {
+                <p class="error-text">{{ e.error }}</p>
+              } @else if (!e.meta) {
+                <p class="error-text">Chưa có ảnh trên máy chủ.</p>
+              } @else {
+                @if (e.images; as img) {
+                  <div class="photos">
+                    <figure><img [src]="img.selfie" alt="Chân dung" /><figcaption>Chân dung</figcaption></figure>
+                    <figure><img [src]="img.field" alt="Ruộng" /><figcaption>Ruộng</figcaption></figure>
+                    <figure><img [src]="img.document" alt="Giấy tờ đất" /><figcaption>Giấy tờ đất</figcaption></figure>
+                  </div>
+                }
+                <ul class="checks">
+                  <li [class.ok]="e.onChain" [class.bad]="!e.onChain">
+                    {{ e.onChain ? 'Đã gửi hash lên blockchain' : 'Chưa gửi hash lên blockchain' }}
+                  </li>
+                  <li [class.ok]="e.hashMatch" [class.bad]="!e.hashMatch">
+                    {{ e.hashMatch ? 'Hash on-chain khớp ảnh trên máy chủ' : 'Hash on-chain KHÔNG khớp ảnh' }}
+                  </li>
+                  <li [class.ok]="!distanceWarning(e.meta)" [class.bad]="distanceWarning(e.meta)">
+                    {{ distanceText(e.meta) }}
+                  </li>
+                  <li>Độ chính xác GPS khai báo: ±{{ e.meta.gpsAccuracy | number: '1.0-0' }} m</li>
+                </ul>
+              }
+              <button class="btn btn-outline" (click)="closeEvidence(p.policyId)">Đóng hồ sơ</button>
+            </div>
+          } @else {
+            <button class="btn btn-outline" (click)="openEvidence(p.policyId)">Xem hồ sơ</button>
+          }
+
           <div class="review-actions">
             <button
               class="btn btn-primary"
-              [disabled]="processingId() === p.policyId"
+              [disabled]="processingId() === p.policyId || !canApprove(p.policyId)"
+              [title]="canApprove(p.policyId) ? '' : 'Cần xem hồ sơ và hash phải khớp mới duyệt được'"
               (click)="review(p.policyId, true)"
             >Duyệt</button>
             <button

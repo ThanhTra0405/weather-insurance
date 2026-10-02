@@ -11,3 +11,12 @@
 .review-actions .btn { flex: 1; }
 .error-text { color: var(--color-error); margin-bottom: 16px; }
 @media (max-width: 640px) { .policy-list { grid-template-columns: 1fr; } }
+.evidence { margin: 12px 0; }
+.photos { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+.photos figure { margin: 0; width: 160px; }
+.photos img { width: 100%; height: 160px; object-fit: cover; border-radius: 8px; border: 1px solid #d9f2e3; }
+.photos figcaption { font-size: 12px; color: #888; text-align: center; margin-top: 4px; }
+.checks { list-style: none; padding: 0; margin: 0 0 12px; font-size: 14px; }
+.checks li { padding: 2px 0; }
+.checks li.ok::before { content: '✓ '; color: var(--color-primary); }
+.checks li.bad::before { content: '✗ '; color: var(--color-error); }

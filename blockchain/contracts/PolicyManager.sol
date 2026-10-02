@@ -9,8 +9,7 @@ interface ILiquidityPool {
     function availableLiquidity() external view returns (uint256);
     function lockCoverage(uint256 policyId, uint256 amount) external;
     function depositPremium() external payable;
-    // MỚI — cần thêm hàm này vào LiquidityPool.sol thật:
-    // gửi trả lại premium + mở khoá coverage khi policy bị từ chối xác minh
+    function unlockCoverage(uint256 policyId) external;
     function refundAndUnlock(
         uint256 policyId,
         address to,
@@ -59,6 +58,13 @@ contract PolicyManager is Ownable, Pausable, ReentrancyGuard {
         PolicyStatus status;
     }
 
+    // Bằng chứng xác minh: chỉ lưu hash, ảnh gốc nằm off-chain
+    struct Evidence {
+        bytes32 fieldPhotoHash;
+        bytes32 documentHash;
+        uint256 submittedAt;
+    }
+
     ILiquidityPool public liquidityPool;
     address public verifier;
     address public addressPayoutEngine;
@@ -71,6 +77,8 @@ contract PolicyManager is Ownable, Pausable, ReentrancyGuard {
     mapping(uint256 => PolicyProduct) public products;
     mapping(uint256 => Policy) public policies;
     mapping(address => uint256[]) public policiesOf;
+    mapping(uint256 => Evidence) public evidenceOf;
+
     event CoolingOffPeriodSet(uint256 seconds_);
     event PolicyProductCreated(
         uint256 indexed productId,
@@ -91,7 +99,13 @@ contract PolicyManager is Ownable, Pausable, ReentrancyGuard {
     );
     event ProductStatusChanged(uint256 id, bool active);
     event PayoutMarked(uint256 indexed policyId);
+    event EvidenceSubmitted(
+        uint256 indexed policyId,
+        bytes32 fieldPhotoHash,
+        bytes32 documentHash
+    );
     event PolicyVerified(uint256 indexed policyId, bool approved);
+    event PolicyExpired(uint256 indexed policyId, bool refunded);
     event VerifierSet(address indexed verifier);
     event LiquidityPoolSet(address indexed pool);
     event PayoutEngineSet(address indexed payoutEngine);
@@ -114,9 +128,8 @@ contract PolicyManager is Ownable, Pausable, ReentrancyGuard {
         liquidityPool = ILiquidityPool(_liquidityPool);
     }
 
-    // ===== Tính regionId ON-CHAIN — thay vì nhận từ tham số =====
-    // Y HỆT công thức trong region.md: làm tròn về lưới 0.2 độ, pack (lat,lng) int256, keccak256.
-    // Chỉ hỗ trợ toạ độ dương (đúng scope đồ án — toàn bộ lãnh thổ VN có lat/lng dương).
+    // regionId tính ON-CHAIN, làm tròn về lưới 0.2 độ, pack (lat,lng), keccak256.
+    // Chỉ hỗ trợ toạ độ dương (đúng scope đồ án — lãnh thổ VN có lat/lng dương).
     function computeRegionId(
         int256 lat,
         int256 lng
@@ -218,7 +231,39 @@ contract PolicyManager is Ownable, Pausable, ReentrancyGuard {
         );
     }
 
-    // ===== MỚI: cơ chế xác minh (tuần 3) =====
+    // ===== Xác minh =====
+
+    // Chủ policy gửi hash ảnh ruộng + ảnh giấy tờ (ảnh gốc lưu ở backend)
+    function submitVerificationEvidence(
+        uint256 policyId,
+        bytes32 fieldPhotoHash,
+        bytes32 documentHash
+    ) external whenNotPaused {
+        Policy storage pol = policies[policyId];
+        require(pol.id != 0, "Policy khong ton tai");
+        require(msg.sender == pol.holder, "Chi chu policy moi duoc gui");
+        require(
+            pol.status == PolicyStatus.PendingVerification,
+            "Policy khong o trang thai cho xac minh"
+        );
+        require(
+            evidenceOf[policyId].submittedAt == 0,
+            "Da gui bang chung roi"
+        );
+        require(
+            fieldPhotoHash != bytes32(0) && documentHash != bytes32(0),
+            "Hash rong"
+        );
+
+        evidenceOf[policyId] = Evidence({
+            fieldPhotoHash: fieldPhotoHash,
+            documentHash: documentHash,
+            submittedAt: block.timestamp
+        });
+
+        emit EvidenceSubmitted(policyId, fieldPhotoHash, documentHash);
+    }
+
     function verifyPolicy(
         uint256 policyId,
         bool approved
@@ -231,18 +276,51 @@ contract PolicyManager is Ownable, Pausable, ReentrancyGuard {
         );
 
         if (approved) {
+            require(
+                evidenceOf[policyId].submittedAt != 0,
+                "Chua co bang chung"
+            );
+            // Cooling-off: hiệu lực sau coolingOffPeriod kể từ lúc duyệt,
+            // thời hạn bảo hiểm tính lại từ mốc đó
             pol.status = PolicyStatus.Active;
+            pol.startTime = block.timestamp + coolingOffPeriod;
+            pol.endTime =
+                pol.startTime +
+                products[pol.productId].durationDays *
+                1 days;
         } else {
             pol.status = PolicyStatus.Closed;
             uint256 refund = pol.premiumPaid;
-            uint256 coverage = pol.coverageAmount;
             pol.premiumPaid = 0;
-            // Hoàn premium + mở khoá coverage đã lock trong pool — cần LiquidityPool implement hàm này
             liquidityPool.refundAndUnlock(policyId, pol.holder, refund);
-            coverage; // giữ biến để LiquidityPool tự đọc lockedAmount theo policyId nếu cần
         }
 
         emit PolicyVerified(policyId, approved);
+    }
+
+    // Bất kỳ ai (keeper/cron) gọi được sau khi policy hết hạn:
+    // - Active: đóng policy, mở khoá coverage, premium thuộc về pool
+    // - Chưa được duyệt: hoàn premium cho chủ policy + mở khoá coverage
+    function expirePolicy(uint256 policyId) external nonReentrant {
+        Policy storage pol = policies[policyId];
+        require(pol.id != 0, "Policy khong ton tai");
+        require(block.timestamp > pol.endTime, "Policy chua het han");
+
+        bool refunded;
+        if (pol.status == PolicyStatus.Active) {
+            pol.status = PolicyStatus.Closed;
+            liquidityPool.unlockCoverage(policyId);
+        } else if (pol.status == PolicyStatus.PendingVerification) {
+            pol.status = PolicyStatus.Closed;
+            uint256 refund = pol.premiumPaid;
+            pol.premiumPaid = 0;
+            liquidityPool.refundAndUnlock(policyId, pol.holder, refund);
+            refunded = true;
+        } else {
+            revert("Policy da dong hoac da boi thuong");
+        }
+
+        emit PolicyExpired(policyId, refunded);
     }
 
     function setVerifier(address _verifier) external onlyOwner {

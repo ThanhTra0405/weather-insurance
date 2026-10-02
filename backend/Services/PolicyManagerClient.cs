@@ -5,6 +5,7 @@ using System.Numerics;
 using System.Threading.Tasks;
 using backend.Services.interfaces;
 using Nethereum.ABI.FunctionEncoding.Attributes;
+using Nethereum.RPC.Eth.DTOs;
 using Nethereum.Web3;
 
 namespace backend.Services
@@ -26,11 +27,23 @@ namespace backend.Services
     }
 
     public record PendingPolicyDTO(
-            ulong PolicyId, string Holder, BigInteger Lat, BigInteger Lng,
-            byte[] RegionId, string CoverageAmountWei, BigInteger EndTime
-        );
+        ulong PolicyId, string Holder, BigInteger Lat, BigInteger Lng,
+        byte[] RegionId, string CoverageAmountWei, BigInteger EndTime
+    );
+
+    /// Ảnh chụp trạng thái policy tại thời điểm block mới nhất.
+    /// Active: đang hiệu lực (chưa quá hạn). Expirable: chưa duyệt hoặc đang hiệu lực nhưng đã quá hạn.
+    public record PolicySnapshot(
+        List<PolicyOutputDTO> Active,
+        List<PolicyOutputDTO> Expirable,
+        BigInteger ChainTime
+    );
+
     public class PolicyManagerClient : IPolicyManagerClient
     {
+        private const byte StatusPending = 0;
+        private const byte StatusActive = 1;
+
         private const string PolicyManagerAbi = @"
         [
         {
@@ -39,6 +52,12 @@ namespace backend.Services
             { ""internalType"": ""bool"", ""name"": ""approved"", ""type"": ""bool"" }
             ],
             ""name"": ""verifyPolicy"", ""outputs"": [], ""stateMutability"": ""nonpayable"", ""type"": ""function""
+        },
+        {
+            ""inputs"": [
+            { ""internalType"": ""uint256"", ""name"": ""policyId"", ""type"": ""uint256"" }
+            ],
+            ""name"": ""expirePolicy"", ""outputs"": [], ""stateMutability"": ""nonpayable"", ""type"": ""function""
         },
         {
             ""inputs"": [], ""name"": ""nextPolicyId"",
@@ -68,9 +87,6 @@ namespace backend.Services
         }
         ]";
 
-
-
-
         private readonly Web3 _web3;
         private readonly string _policyManagerAddress;
         private readonly ILogger<PolicyManagerClient> _logger;
@@ -98,35 +114,74 @@ namespace backend.Services
 
             _logger.LogInformation("Goi verifyPolicy: policyId={PolicyId} approved={Approved}", policyId, approved);
 
-            var txHash = await function.SendTransactionAsync(
+            return await function.SendTransactionAsync(
                 from: _web3.TransactionManager.Account.Address,
                 gas: new Nethereum.Hex.HexTypes.HexBigInteger(300_000),
                 value: null,
                 functionInput: new object[] { new BigInteger(policyId), approved }
             );
+        }
 
-            return txHash;
+        public async Task<string> ExpirePolicyAsync(ulong policyId, CancellationToken ct = default)
+        {
+            var contract = _web3.Eth.GetContract(PolicyManagerAbi, _policyManagerAddress);
+            var function = contract.GetFunction("expirePolicy");
+
+            _logger.LogInformation("Goi expirePolicy: policyId={PolicyId}", policyId);
+
+            return await function.SendTransactionAsync(
+                from: _web3.TransactionManager.Account.Address,
+                gas: new Nethereum.Hex.HexTypes.HexBigInteger(300_000),
+                value: null,
+                functionInput: new object[] { new BigInteger(policyId) }
+            );
         }
 
         public async Task<List<PendingPolicyDTO>> GetPendingPoliciesAsync(CancellationToken ct = default)
+        {
+            var all = await ReadAllPoliciesAsync();
+            return all
+                .Where(p => p.Status == StatusPending)
+                .Select(p => new PendingPolicyDTO(
+                    (ulong)p.Id, p.Holder, p.Lat, p.Lng, p.RegionId,
+                    p.CoverageAmount.ToString(), p.EndTime))
+                .ToList();
+        }
+
+        public async Task<PolicySnapshot> GetSnapshotAsync(CancellationToken ct = default)
+        {
+            var all = await ReadAllPoliciesAsync();
+
+            // Dùng thời gian của block mới nhất (khớp block.timestamp mà contract so sánh,
+            // kể cả khi Hardhat được tua thời gian bằng time.increase)
+            var block = await _web3.Eth.Blocks.GetBlockWithTransactionsHashesByNumber
+                .SendRequestAsync(BlockParameter.CreateLatest());
+            BigInteger now = block.Timestamp.Value;
+
+            var active = all
+                .Where(p => p.Status == StatusActive && p.EndTime >= now)
+                .ToList();
+            var expirable = all
+                .Where(p => (p.Status == StatusActive || p.Status == StatusPending) && p.EndTime < now)
+                .ToList();
+
+            return new PolicySnapshot(active, expirable, now);
+        }
+
+        // Đọc toàn bộ policy: O(n) lệnh gọi RPC mỗi lần, đủ cho demo.
+        // Khi nhiều policy thì chuyển sang lắng nghe event PolicyCreated/PolicyVerified.
+        private async Task<List<PolicyOutputDTO>> ReadAllPoliciesAsync()
         {
             var contract = _web3.Eth.GetContract(PolicyManagerAbi, _policyManagerAddress);
             var nextIdFn = contract.GetFunction("nextPolicyId");
             var getPolicyFn = contract.GetFunction("getPolicy");
 
             BigInteger nextId = await nextIdFn.CallAsync<BigInteger>();
-            var result = new List<PendingPolicyDTO>();
+            var result = new List<PolicyOutputDTO>();
 
             for (BigInteger i = 1; i < nextId; i++)
             {
-                var policy = await getPolicyFn.CallDeserializingToObjectAsync<PolicyOutputDTO>(i);
-                if (policy.Status == 0) // PendingVerification
-                {
-                    result.Add(new PendingPolicyDTO(
-                        (ulong)i, policy.Holder, policy.Lat, policy.Lng, policy.RegionId,
-                        policy.CoverageAmount.ToString(), policy.EndTime
-                    ));
-                }
+                result.Add(await getPolicyFn.CallDeserializingToObjectAsync<PolicyOutputDTO>(i));
             }
 
             return result;

@@ -43,6 +43,8 @@ appsettings.Development.json
 appsettings.*.json
 !appsettings.Example.json
 
+EvidenceStore/
+
 .env
 .env.*
 !.env.example
@@ -74,7 +76,7 @@ TestResults/
 # pnpm deploy output
 **/bundle/
 
-
+**/environments/
 # ============================================================
 # Hardhat
 # ============================================================

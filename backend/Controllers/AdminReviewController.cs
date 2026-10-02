@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Mvc;
 namespace backend.Controllers
 {
     [ApiController]
+    [AdminKey]
     [Route("api/admin")]
     public class AdminReviewController : ControllerBase
     {
@@ -19,8 +20,6 @@ namespace backend.Controllers
         [HttpPost("review/{policyId}")]
         public async Task<IActionResult> ReviewPolicy(ulong policyId, [FromBody] ReviewRequest request, CancellationToken ct)
         {
-            // TODO tuan sau: doi chieu EXIF anh ruong voi GPS khai bao truoc khi cho phep approve
-
             try
             {
                 var txHash = await _policyManagerClient.VerifyPolicyAsync(policyId, request.Approved, ct);

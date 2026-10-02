@@ -47,6 +47,8 @@ contract PayoutEngine is Ownable, Pausable, ReentrancyGuard {
             .products(pol.productId);
 
         (uint256 value, uint256 ts) = oracle.getWeatherData(pol.regionId);
+        // startTime đã bao gồm cooling-off (PolicyManager.verifyPolicy set),
+        // nên dữ liệu trước mốc này không được tính
         if (ts < pol.startTime) return false;
 
         // perilType 0 = han han (mua duoi nguong moi kich hoat)
@@ -68,15 +70,10 @@ contract PayoutEngine is Ownable, Pausable, ReentrancyGuard {
         );
         require(block.timestamp <= pol.endTime, "Policy het han");
 
+        // Chống mua policy sau khi đã biết trước thiên tai:
+        // chỉ nhận dữ liệu oracle sau startTime (= thời điểm duyệt + cooling-off)
         (, uint256 ts) = oracle.getWeatherData(pol.regionId);
-        require(ts >= pol.startTime, "Du lieu qua cu");
-
-        // MỚI: chống mua policy sau khi đã biết trước thiên tai
-        uint256 cooling = policyManager.coolingOffPeriod();
-        require(
-            ts >= pol.startTime + cooling,
-            "Con trong thoi gian cooling-off"
-        );
+        require(ts >= pol.startTime, "Du lieu truoc thoi diem hieu luc");
 
         require(isThresholdMet(policyId), "Chua dat nguong");
 

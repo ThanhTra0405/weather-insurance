@@ -16,7 +16,9 @@ contract LiquidityPool is Ownable, Pausable, ReentrancyGuard {
     event LiquidityAdded(address indexed provider, uint256 amount);
     event LiquidityWithdrawn(address indexed provider, uint256 amount);
     event PolicyManagerSet(address indexed policyManager);
-    event PolicyRefunded(uint256 indexed policyId, address indexed to, uint256 refundAmount, uint256 unlockedCoverage); // MỚI
+    event PolicyRefunded(uint256 indexed policyId, address indexed to, uint256 refundAmount, uint256 unlockedCoverage);
+    event CoverageUnlocked(uint256 indexed policyId, uint256 amount);
+
     constructor() Ownable(msg.sender) {}
 
     modifier onlyPolicyManager() {
@@ -56,6 +58,18 @@ contract LiquidityPool is Ownable, Pausable, ReentrancyGuard {
         require(amount <= totalDeposited - totalLocked, "Khong du eth");
         lockedAmount[policyId] = amount;
         totalLocked = totalLocked + amount;
+    }
+
+    // Policy hết hạn không payout: mở khoá coverage, không chuyển ETH.
+    // Không gắn whenNotPaused để hết hạn vẫn giải phóng được vốn khi đang pause.
+    function unlockCoverage(uint256 policyId) external onlyPolicyManager {
+        uint256 locked = lockedAmount[policyId];
+        require(locked > 0, "Policy chua duoc khoa hoac da xu ly");
+
+        lockedAmount[policyId] = 0;
+        totalLocked -= locked;
+
+        emit CoverageUnlocked(policyId, locked);
     }
 
     function depositPremium() external payable onlyPolicyManager whenNotPaused {

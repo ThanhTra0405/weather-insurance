@@ -13,6 +13,7 @@ builder.Services.AddSingleton<INearestStationService, NearestStationService>();
 builder.Services.AddSingleton<IRegionService, RegionService>();
 builder.Services.AddSingleton<IOracleSubmitter, OracleSubmitter>();
 builder.Services.AddSingleton<IPolicyManagerClient, PolicyManagerClient>();
+builder.Services.AddSingleton<IPayoutEngineClient, PayoutEngineClient>();
 builder.Services.AddHostedService<OracleWorker>();
 builder.Services.AddSingleton<StationRepository>();
 
