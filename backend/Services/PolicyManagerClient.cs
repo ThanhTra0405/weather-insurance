@@ -168,6 +168,18 @@ namespace backend.Services
             return new PolicySnapshot(active, expirable, now);
         }
 
+        public async Task<ulong> GetNextPolicyIdAsync(CancellationToken ct = default)
+        {
+            var fn = _web3.Eth.GetContract(PolicyManagerAbi, _policyManagerAddress).GetFunction("nextPolicyId");
+            return (ulong)await fn.CallAsync<BigInteger>();
+        }
+
+        public async Task<PolicyOutputDTO> GetPolicyAsync(ulong id, CancellationToken ct = default)
+        {
+            var fn = _web3.Eth.GetContract(PolicyManagerAbi, _policyManagerAddress).GetFunction("getPolicy");
+            return await fn.CallDeserializingToObjectAsync<PolicyOutputDTO>(new BigInteger(id));
+        }
+
         // Đọc toàn bộ policy: O(n) lệnh gọi RPC mỗi lần, đủ cho demo.
         // Khi nhiều policy thì chuyển sang lắng nghe event PolicyCreated/PolicyVerified.
         private async Task<List<PolicyOutputDTO>> ReadAllPoliciesAsync()

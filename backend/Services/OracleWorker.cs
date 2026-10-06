@@ -1,6 +1,5 @@
-using System;
-using System.Linq;
-using System.Threading.Tasks;
+using System.Data.Common;
+using backend.Data;
 using backend.Services.interfaces;
 
 namespace backend.Services
@@ -106,6 +105,19 @@ namespace backend.Services
                 {
                     _logger.LogError(ex, "Loi expire policy {PolicyId}", id);
                 }
+            }
+        }
+        public async Task SaveSafeAsync(AppDbContext appDbContext, Action add, CancellationToken ct)
+        {
+            try
+            {
+                add();
+                await appDbContext.SaveChangesAsync(ct);
+            }
+            catch (Exception ex)
+            {
+                appDbContext.ChangeTracker.Clear();
+                _logger.LogError(ex, "Loi ghi lich su vao DB");
             }
         }
     }

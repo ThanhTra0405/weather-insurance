@@ -1,7 +1,9 @@
+using backend.Data;
 using backend.Middleware;
 using backend.Repository;
 using backend.Services;
 using backend.Services.interfaces;
+using Microsoft.EntityFrameworkCore;
 using WeatherInsurance.Backend.Services;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -16,6 +18,13 @@ builder.Services.AddSingleton<IPolicyManagerClient, PolicyManagerClient>();
 builder.Services.AddSingleton<IPayoutEngineClient, PayoutEngineClient>();
 builder.Services.AddHostedService<OracleWorker>();
 builder.Services.AddSingleton<StationRepository>();
+
+builder.Services.AddDbContext<AppDbContext>(o =>
+{
+    o.UseNpgsql(builder.Configuration.GetConnectionString("DateBaseConnetion"));
+});
+
+builder.Services.AddHostedService<PolicySyncWorker>();
 
 builder.Services.AddCors(options =>
 {
