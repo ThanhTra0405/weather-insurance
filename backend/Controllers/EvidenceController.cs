@@ -2,6 +2,7 @@ using System.Security.Cryptography;
 using System.Text.Json;
 using MetadataExtractor;
 using MetadataExtractor.Formats.Exif;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.StaticFiles;
 using Directory = System.IO.Directory;
@@ -90,7 +91,7 @@ namespace backend.Controllers
             return Ok(meta);
         }
 
-        [AdminKey]
+        [Authorize(Roles = "admin,support")]
         [HttpGet("{policyId}/meta")]
         public IActionResult GetMeta(ulong policyId)
         {
@@ -99,7 +100,7 @@ namespace backend.Controllers
             return Content(System.IO.File.ReadAllText(path), "application/json");
         }
 
-        [AdminKey]
+        [Authorize(Roles = "admin,support")]
         [HttpGet("{policyId}/{kind}")]
         public IActionResult GetImage(ulong policyId, string kind)
         {
@@ -125,7 +126,7 @@ namespace backend.Controllers
             }
             catch
             {
-                return null; // định dạng không đọc được (VD HEIC) hoặc EXIF bị xoá
+                return null; // Ä‘á»‹nh dáº¡ng khÃ´ng Ä‘á»c Ä‘Æ°á»£c (VD HEIC) hoáº·c EXIF bá»‹ xoÃ¡
             }
         }
 

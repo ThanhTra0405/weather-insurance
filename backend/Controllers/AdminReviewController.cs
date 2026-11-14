@@ -1,10 +1,11 @@
 using backend.Services.interfaces;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace backend.Controllers
 {
     [ApiController]
-    [AdminKey]
+    [Authorize]
     [Route("api/admin")]
     public class AdminReviewController : ControllerBase
     {
@@ -17,6 +18,7 @@ namespace backend.Controllers
             _logger = logger;
         }
 
+        [Authorize(Roles = "admin")]
         [HttpPost("review/{policyId}")]
         public async Task<IActionResult> ReviewPolicy(ulong policyId, [FromBody] ReviewRequest request, CancellationToken ct)
         {
@@ -34,6 +36,8 @@ namespace backend.Controllers
             }
         }
 
+        // TODO(ngày 2): chuyển sang AdminPendingController của A (đọc policies_cache), xoá action này.
+        [Authorize(Roles = "admin,support")]
         [HttpGet("pending-policies")]
         public async Task<IActionResult> GetPendingPolicies(CancellationToken ct)
         {
