@@ -1,4 +1,6 @@
-import { Injectable } from '@angular/core';
+import { Injectable, inject } from '@angular/core';
+import { HttpClient } from '@angular/common/http';
+import { firstValueFrom } from 'rxjs';
 import { environment } from '../../environments/environment';
 
 export interface EvidenceFiles {
@@ -15,6 +17,8 @@ export interface GpsInfo {
 
 @Injectable({ providedIn: 'root' })
 export class EvidenceService {
+  private readonly http = inject(HttpClient);
+
   async sha256(file: File): Promise<string> {
     if (!crypto?.subtle) throw new Error('Cần mở trang bằng HTTPS (hoặc localhost) để băm ảnh');
     const digest = await crypto.subtle.digest('SHA-256', await file.arrayBuffer());
@@ -34,10 +38,14 @@ export class EvidenceService {
     form.append('field', files.field);
     form.append('document', files.document);
 
-    const res = await fetch(`${environment.backendUrl}/api/evidence/${policyId}`, {
-      method: 'POST',
-      body: form,
-    });
-    if (!res.ok) throw new Error('Tải ảnh lên máy chủ thất bại');
+    try {
+      await firstValueFrom(
+        this.http.post(`${environment.backendUrl}/api/evidence/${policyId}`, form, {
+          responseType: 'text',
+        })
+      );
+    } catch {
+      throw new Error('Tải ảnh lên máy chủ thất bại');
+    }
   }
 }

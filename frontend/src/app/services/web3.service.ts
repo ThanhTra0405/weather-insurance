@@ -1,5 +1,7 @@
 import { Injectable, PLATFORM_ID, inject, signal } from '@angular/core';
 import { isPlatformBrowser } from '@angular/common';
+import { HttpClient } from '@angular/common/http';
+import { firstValueFrom } from 'rxjs';
 import { JsonRpcProvider, Wallet, Signer, parseEther, toQuantity } from 'ethers';
 import { environment } from '../../environments/environment';
 
@@ -14,9 +16,10 @@ export class Web3Service {
   readonly isConnecting = signal(true);
   readonly errorMessage = signal<string | null>(null);
 
+  private readonly http = inject(HttpClient);
   private readonly isBrowser = isPlatformBrowser(inject(PLATFORM_ID));
 
-  private provider = new JsonRpcProvider(environment.rpcUrl);
+  private _provider?: JsonRpcProvider;
   private wallet?: Wallet;
   ready: Promise<void>;
 
@@ -33,11 +36,18 @@ export class Web3Service {
     }
   }
 
+  /** Provider tạo lười, chỉ tồn tại ở trình duyệt. */
+  private get provider(): JsonRpcProvider {
+    if (!this.isBrowser) {
+      throw new Error('Provider chỉ dùng được ở trình duyệt');
+    }
+    return (this._provider ??= new JsonRpcProvider(environment.rpcUrl));
+  }
+
   get isConnected(): boolean {
     return this.address() !== null;
   }
 
-  /** Kết nối (hoặc kết nối lại) ví. Dùng lại private key đã lưu nếu có. */
   connect(): Promise<void> {
     if (!this.isBrowser) return Promise.resolve();
     localStorage.removeItem(DISCONNECTED_KEY);
@@ -47,7 +57,6 @@ export class Web3Service {
     return this.ready;
   }
 
-  /** Ngắt kết nối khỏi app. Private key vẫn giữ trong localStorage để kết nối lại đúng ví cũ. */
   disconnect(): void {
     if (this.isBrowser) localStorage.setItem(DISCONNECTED_KEY, '1');
     this.wallet = undefined;
@@ -89,12 +98,13 @@ export class Web3Service {
     if (environment.devFaucet) {
       await this.provider.send('hardhat_setBalance', [addr, toQuantity(parseEther('100'))]);
     } else if (environment.faucetUrl) {
-      const res = await fetch(environment.faucetUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ address: addr }),
-      });
-      if (!res.ok) throw new Error('Không nạp được gas cho ví mới');
+      try {
+        await firstValueFrom(
+          this.http.post(environment.faucetUrl, { address: addr }, { responseType: 'text' })
+        );
+      } catch {
+        throw new Error('Không nạp được gas cho ví mới');
+      }
     }
   }
 
