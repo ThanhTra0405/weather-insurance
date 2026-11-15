@@ -161,4 +161,17 @@ contract LiquidityPool is Ownable, Pausable, ReentrancyGuard {
 
         emit PolicyRefunded(policyId, to, refundAmount, locked);
     }
+
+    function getPoolStats() external view returns(
+        uint256 poolBalance,
+        uint256 deposited,
+        uint256 locked,
+        uint256 available
+    )
+    {
+        poolBalance = address(this).balance;
+        deposited = totalDeposited;
+        locked = totalLocked;
+        available = totalDeposited - totalLocked;
+    }
 }

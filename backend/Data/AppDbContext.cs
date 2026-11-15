@@ -1,37 +1,44 @@
 using backend.Data.Entities;
 using Microsoft.EntityFrameworkCore;
 
-namespace backend.Data
+namespace backend.Data;
+
+/// <summary>
+/// DbContext chung của B và A. Schema do EF Core migrations tạo (thư mục Data/Migrations),
+/// mô hình tham chiếu ở docs/specs/SPEC-00-shared.md mục 3. Chỉ B tạo migration.
+/// </summary>
+public class AppDbContext : DbContext
 {
-    public class AppDbContext : DbContext
+    public AppDbContext(DbContextOptions<AppDbContext> options) : base(options)
     {
-        public AppDbContext(DbContextOptions<AppDbContext> options) : base(options) { }
-        public DbSet<PolicyRecord> Policies => Set<PolicyRecord>();
-        public DbSet<PayoutRecord> Payouts => Set<PayoutRecord>();
-        public DbSet<OracleSubmission> OracleSubmissions => Set<OracleSubmission>();
-        protected override void OnModelCreating(ModelBuilder modelBuilder)
-        {
-            modelBuilder.Entity<PolicyRecord>(e =>
-            {
-                e.HasKey(x => x.PolicyId);
-                e.Property(x => x.PolicyId).ValueGeneratedNever();
-                e.Property(x => x.Lat).HasPrecision(9,6);
-                e.Property(x => x.Lng).HasPrecision(9,6);
-                e.HasIndex(x => x.Holder);
-                e.HasIndex(x => x.RegionId);
-                e.HasIndex(x => x.Status);
-            });
+    }
 
-            modelBuilder.Entity<OracleSubmission>(e =>
-            {
-                e.Property(x => x.RainfallMm).HasPrecision(12, 3);
-                e.HasIndex(x => new { x. RegionId, x.CreatedAt });
-            });
+    // Người dùng
+    public DbSet<FarmerProfile> FarmerProfiles => Set<FarmerProfile>();
+    public DbSet<Staff> Staff => Set<Staff>();
+    public DbSet<AuthNonce> AuthNonces => Set<AuthNonce>();
 
-            modelBuilder.Entity<PayoutRecord>(e =>
-            {
-                e.HasIndex(x => x.PolicyId);
-            });
-        }
+    // Hồ sơ xác minh
+    public DbSet<EvidenceMeta> EvidenceMetas => Set<EvidenceMeta>();
+    public DbSet<ReviewLog> ReviewLogs => Set<ReviewLog>();
+
+    // CSKH và thông báo
+    public DbSet<Ticket> Tickets => Set<Ticket>();
+    public DbSet<TicketMessage> TicketMessages => Set<TicketMessage>();
+    public DbSet<CannedReply> CannedReplies => Set<CannedReply>();
+    public DbSet<Notification> Notifications => Set<Notification>();
+
+    // Dữ liệu chain (A ghi)
+    public DbSet<ChainEvent> ChainEvents => Set<ChainEvent>();
+    public DbSet<ProductCache> ProductsCache => Set<ProductCache>();
+    public DbSet<PolicyCache> PoliciesCache => Set<PolicyCache>();
+    public DbSet<IndexerState> IndexerStates => Set<IndexerState>();
+    public DbSet<OracleLog> OracleLogs => Set<OracleLog>();
+
+    public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
+
+    protected override void OnModelCreating(ModelBuilder modelBuilder)
+    {
+        modelBuilder.ApplyConfigurationsFromAssembly(typeof(AppDbContext).Assembly);
     }
 }

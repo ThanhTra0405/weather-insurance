@@ -1,4 +1,7 @@
-import { Injectable, signal } from '@angular/core';
+import { Injectable, PLATFORM_ID, inject, signal } from '@angular/core';
+import { isPlatformBrowser } from '@angular/common';
+import { HttpClient, HttpErrorResponse, HttpHeaders } from '@angular/common/http';
+import { Observable, firstValueFrom } from 'rxjs';
 import { environment } from '../../environments/environment';
 
 export interface PendingPolicy {
@@ -23,70 +26,88 @@ export interface EvidenceMeta {
 }
 
 export type EvidenceKind = 'selfie' | 'field' | 'document';
+const API_KEY_STORAGE = 'adminApiKey';
 
 @Injectable({ providedIn: 'root' })
 export class AdminService {
-  readonly apiKey = signal<string | null>(sessionStorage.getItem('adminApiKey'));
+  private readonly http = inject(HttpClient);
+  private readonly isBrowser = isPlatformBrowser(inject(PLATFORM_ID));
+
+  readonly apiKey = signal<string | null>(
+    this.isBrowser ? sessionStorage.getItem(API_KEY_STORAGE) : null
+  );
 
   private readonly baseUrl = environment.backendUrl;
 
   login(key: string): void {
     this.apiKey.set(key);
-    sessionStorage.setItem('adminApiKey', key);
+    if (this.isBrowser) sessionStorage.setItem(API_KEY_STORAGE, key);
   }
 
   logout(): void {
     this.apiKey.set(null);
-    sessionStorage.removeItem('adminApiKey');
+    if (this.isBrowser) sessionStorage.removeItem(API_KEY_STORAGE);
   }
 
-  private headers(): HeadersInit {
-    return { 'X-Admin-Key': this.apiKey() ?? '', 'Content-Type': 'application/json' };
+  private headers(): HttpHeaders {
+    return new HttpHeaders({ 'X-Admin-Key': this.apiKey() ?? '' });
   }
 
-  private checkAuth(res: Response): void {
-    if (res.status === 401 || res.status === 403) {
-      this.logout();
-      throw new Error('Admin key không đúng');
+  /** Gọi request, xử lý 401/403 (logout), 404 (tuỳ chọn trả null), lỗi khác -> errMsg */
+  private async call<T>(obs: Observable<T>, errMsg: string, nullOn404 = false): Promise<T> {
+    try {
+      return await firstValueFrom(obs);
+    } catch (e) {
+      if (e instanceof HttpErrorResponse) {
+        if (e.status === 401 || e.status === 403) {
+          this.logout();
+          throw new Error('Admin key không đúng');
+        }
+        if (e.status === 404 && nullOn404) return null as T;
+      }
+      throw new Error(errMsg);
     }
   }
 
-  async getPendingPolicies(): Promise<PendingPolicy[]> {
-    const res = await fetch(`${this.baseUrl}/api/admin/pending-policies`, {
-      headers: this.headers(),
-    });
-    this.checkAuth(res);
-    if (!res.ok) throw new Error('Không lấy được danh sách hồ sơ chờ duyệt');
-    return res.json();
+  getPendingPolicies(): Promise<PendingPolicy[]> {
+    return this.call(
+      this.http.get<PendingPolicy[]>(`${this.baseUrl}/api/admin/pending-policies`, {
+        headers: this.headers(),
+      }),
+      'Không lấy được danh sách hồ sơ chờ duyệt'
+    );
   }
 
   async reviewPolicy(policyId: number, approved: boolean): Promise<void> {
-    const res = await fetch(`${this.baseUrl}/api/admin/review/${policyId}`, {
-      method: 'POST',
-      headers: this.headers(),
-      body: JSON.stringify({ approved }),
-    });
-    this.checkAuth(res);
-    if (!res.ok) throw new Error('Duyệt policy thất bại');
+    await this.call(
+      this.http.post(
+        `${this.baseUrl}/api/admin/review/${policyId}`,
+        { approved },
+        { headers: this.headers(), responseType: 'text' }
+      ),
+      'Duyệt policy thất bại'
+    );
   }
 
-  async getEvidenceMeta(policyId: number): Promise<EvidenceMeta | null> {
-    const res = await fetch(`${this.baseUrl}/api/evidence/${policyId}/meta`, {
-      headers: this.headers(),
-    });
-    this.checkAuth(res);
-    if (res.status === 404) return null;
-    if (!res.ok) throw new Error('Không lấy được thông tin hồ sơ');
-    return res.json();
+  getEvidenceMeta(policyId: number): Promise<EvidenceMeta | null> {
+    return this.call(
+      this.http.get<EvidenceMeta | null>(`${this.baseUrl}/api/evidence/${policyId}/meta`, {
+        headers: this.headers(),
+      }),
+      'Không lấy được thông tin hồ sơ',
+      true
+    );
   }
 
   /** Trả về blob URL (gửi key qua header, không để key lên URL) */
   async getEvidenceImage(policyId: number, kind: EvidenceKind): Promise<string> {
-    const res = await fetch(`${this.baseUrl}/api/evidence/${policyId}/${kind}`, {
-      headers: { 'X-Admin-Key': this.apiKey() ?? '' },
-    });
-    this.checkAuth(res);
-    if (!res.ok) throw new Error(`Không tải được ảnh ${kind}`);
-    return URL.createObjectURL(await res.blob());
+    const blob = await this.call(
+      this.http.get(`${this.baseUrl}/api/evidence/${policyId}/${kind}`, {
+        headers: this.headers(),
+        responseType: 'blob',
+      }),
+      `Không tải được ảnh ${kind}`
+    );
+    return URL.createObjectURL(blob);
   }
 }

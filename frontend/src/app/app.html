@@ -1,16 +1,23 @@
 <header class="app-header">
   <div class="container header-inner">
-    <a routerLink="/dashboard" class="logo">🌾 Bảo hiểm thời tiết</a>
+    <a [routerLink]="homeLink()" class="logo">🌾 Bảo hiểm thời tiết</a>
 
-    <nav class="nav-links">
-      <a routerLink="/dashboard" routerLinkActive="active">Dashboard</a>
-      <a routerLink="/buy-policy" routerLinkActive="active">Mua bảo hiểm</a>
-    </nav>
+    @if (navItems().length > 0) {
+      <nav class="nav-links" aria-label="Điều hướng chính">
+        @for (item of navItems(); track item.path) {
+          <a [routerLink]="item.path" routerLinkActive="active">{{ item.label }}</a>
+        }
+      </nav>
+    } @else {
+      <span class="nav-spacer"></span>
+    }
 
-    <app-connect-wallet-button />
+    <app-account-menu />
   </div>
 </header>
 
 <main>
   <router-outlet />
 </main>
+
+<app-toast-container />

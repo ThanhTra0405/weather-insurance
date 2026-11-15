@@ -4,8 +4,9 @@ import { buildModule } from "@nomicfoundation/hardhat-ignition/modules";
 // MockWeatherOracle -> LiquidityPool -> PolicyManager -> PayoutEngine
 // rồi nối quyền chéo giữa các contract (setPolicyManager / setPayoutEngine).
 export default buildModule("DeployAllModule", (m) => {
+  const backendSigner = m.getParameter("backendSigner");
   // 1. Oracle không phụ thuộc contract nào khác -> deploy trước
-  const oracle = m.contract("MockWeatherOracle");
+  const oracle = m.contract("SelfHostedOracle", [backendSigner]);
 
   // 2. Pool không cần biết địa chỉ PolicyManager lúc deploy (set sau qua setPolicyManager)
   const pool = m.contract("LiquidityPool");
