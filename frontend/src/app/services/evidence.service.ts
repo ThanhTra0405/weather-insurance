@@ -1,7 +1,5 @@
 import { Injectable, inject } from '@angular/core';
-import { HttpClient } from '@angular/common/http';
-import { firstValueFrom } from 'rxjs';
-import { environment } from '../../environments/environment';
+import { ApiError, ApiService } from './api.service';
 
 export interface EvidenceFiles {
   selfie: File;
@@ -17,7 +15,7 @@ export interface GpsInfo {
 
 @Injectable({ providedIn: 'root' })
 export class EvidenceService {
-  private readonly http = inject(HttpClient);
+  private readonly api = inject(ApiService);
 
   async sha256(file: File): Promise<string> {
     if (!crypto?.subtle) throw new Error('Cần mở trang bằng HTTPS (hoặc localhost) để băm ảnh');
@@ -28,9 +26,10 @@ export class EvidenceService {
     return '0x' + hex;
   }
 
+  /** Gửi 3 ảnh + toạ độ lên backend (cần đăng nhập nông dân). Chủ policy do server lấy từ JWT. */
   async upload(policyId: bigint, files: EvidenceFiles, gps: GpsInfo, holder: string): Promise<void> {
     const form = new FormData();
-    form.append('holder', holder);
+    form.append('holder', holder); // server bỏ qua, giữ để tương thích
     form.append('lat', String(gps.lat));
     form.append('lng', String(gps.lng));
     form.append('accuracy', String(gps.accuracy));
@@ -39,13 +38,9 @@ export class EvidenceService {
     form.append('document', files.document);
 
     try {
-      await firstValueFrom(
-        this.http.post(`${environment.backendUrl}/api/evidence/${policyId}`, form, {
-          responseType: 'text',
-        })
-      );
-    } catch {
-      throw new Error('Tải ảnh lên máy chủ thất bại');
+      await this.api.postForm(`/api/evidence/${policyId}`, form);
+    } catch (e) {
+      throw new Error(e instanceof ApiError && e.message ? e.message : 'Tải ảnh lên máy chủ thất bại');
     }
   }
 }

@@ -252,7 +252,16 @@ namespace backend.Controllers
             }
             else
             {
-                result["staffId"] = User.GetStaffId();
+                var staffId = User.GetStaffId();
+                result["staffId"] = staffId;
+                if (staffId != null)
+                {
+                    var email = await _db.Staff.AsNoTracking()
+                        .Where(s => s.Id == staffId.Value)
+                        .Select(s => s.Email)
+                        .FirstOrDefaultAsync(ct);
+                    if (email != null) result["email"] = email;
+                }
             }
 
             return Ok(result);

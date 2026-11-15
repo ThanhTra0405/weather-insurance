@@ -43,10 +43,17 @@
   border-bottom-color: var(--color-primary);
 }
 
+.nav-spacer {
+  flex: 1;
+}
+
 @media (max-width: 640px) {
   .header-inner {
     flex-wrap: wrap;
     gap: 10px;
+  }
+  .nav-spacer {
+    display: none;
   }
   .nav-links {
     order: 3;

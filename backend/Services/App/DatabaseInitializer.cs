@@ -8,8 +8,8 @@ namespace backend.Services.App;
 
 /// <summary>
 /// Chạy khi khởi động, được chờ xong trước các hosted service đăng ký sau nó (của A):
-/// áp dụng migration (nếu Database:AutoMigrate = true) rồi seed tài khoản admin/support từ Seed:*.
-/// Việc tạo bucket Storage sẽ thêm ở đợt 3 (cần IEvidenceStorage).
+/// áp dụng migration (nếu Database:AutoMigrate = true), tạo bucket Storage nếu chưa có,
+/// rồi seed tài khoản admin/support từ Seed:*.
 /// </summary>
 public class DatabaseInitializer : IHostedService
 {
@@ -17,14 +17,16 @@ public class DatabaseInitializer : IHostedService
     private const int MinPasswordLength = 10;
 
     private readonly IDbContextFactory<AppDbContext> _dbFactory;
+    private readonly IEvidenceStorage _storage;
     private readonly DatabaseOptions _database;
     private readonly SeedOptions _seed;
     private readonly ILogger<DatabaseInitializer> _logger;
 
-    public DatabaseInitializer(IDbContextFactory<AppDbContext> dbFactory, IOptions<DatabaseOptions> database,
-        IOptions<SeedOptions> seed, ILogger<DatabaseInitializer> logger)
+    public DatabaseInitializer(IDbContextFactory<AppDbContext> dbFactory, IEvidenceStorage storage,
+        IOptions<DatabaseOptions> database, IOptions<SeedOptions> seed, ILogger<DatabaseInitializer> logger)
     {
         _dbFactory = dbFactory;
+        _storage = storage;
         _database = database.Value;
         _seed = seed.Value;
         _logger = logger;
@@ -39,6 +41,16 @@ public class DatabaseInitializer : IHostedService
             _logger.LogInformation("Đang áp dụng migration cơ sở dữ liệu...");
             await db.Database.MigrateAsync(cancellationToken);
             _logger.LogInformation("Migration hoàn tất.");
+        }
+
+        try
+        {
+            await _storage.EnsureBucketAsync(cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            // Không làm sập backend: chưa cấu hình Supabase thì chỉ ảnh bằng chứng là chưa dùng được.
+            _logger.LogWarning(ex, "Không tạo/kiểm tra được bucket Storage (kiểm tra Supabase:Url và Supabase:ServiceRoleKey).");
         }
 
         await SeedStaffAsync(db, _seed.Admin, "admin", "Quản trị viên", cancellationToken);
