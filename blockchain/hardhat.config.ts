@@ -1,6 +1,13 @@
 import hardhatToolboxMochaEthersPlugin from "@nomicfoundation/hardhat-toolbox-mocha-ethers";
 import { configVariable, defineConfig } from "hardhat/config";
 
+// Hardhat 3 KHÔNG tự đọc .env -> nạp thủ công (Node >= 20.12). Không có file thì bỏ qua.
+try {
+  process.loadEnvFile(".env");
+} catch {
+  /* không có .env: dùng biến môi trường hoặc keystore */
+}
+
 export default defineConfig({
   plugins: [hardhatToolboxMochaEthersPlugin],
   solidity: {
@@ -38,6 +45,12 @@ export default defineConfig({
       type: "http",
       chainType: "l1",
       url: "http://127.0.0.1:8545",
+    },
+  },
+  // Verify Etherscan (npx hardhat ignition deploy ... --verify)
+  verify: {
+    etherscan: {
+      apiKey: configVariable("ETHERSCAN_API_KEY"),
     },
   },
 });

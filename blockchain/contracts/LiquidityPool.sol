@@ -110,6 +110,24 @@ contract LiquidityPool is Ownable, Pausable, ReentrancyGuard {
         return address(this).balance;
     }
 
+    function getPoolStats()
+        external
+        view
+        returns (
+            uint256 balance,
+            uint256 deposited,
+            uint256 locked,
+            uint256 available
+        )
+    {
+        return (
+            address(this).balance,
+            totalDeposited,
+            totalLocked,
+            totalDeposited - totalLocked
+        );
+    }
+
     function pause() external onlyOwner {
         _pause();
     }
@@ -145,7 +163,7 @@ contract LiquidityPool is Ownable, Pausable, ReentrancyGuard {
         uint256 policyId,
         address to,
         uint256 refundAmount
-    ) external onlyPolicyManager whenNotPaused nonReentrant {
+    ) external onlyPolicyManager nonReentrant {
         uint256 locked = lockedAmount[policyId];
         require(locked > 0, "Policy chua duoc khoa hoac da xu ly");
 
@@ -160,18 +178,5 @@ contract LiquidityPool is Ownable, Pausable, ReentrancyGuard {
         }
 
         emit PolicyRefunded(policyId, to, refundAmount, locked);
-    }
-
-    function getPoolStats() external view returns(
-        uint256 poolBalance,
-        uint256 deposited,
-        uint256 locked,
-        uint256 available
-    )
-    {
-        poolBalance = address(this).balance;
-        deposited = totalDeposited;
-        locked = totalLocked;
-        available = totalDeposited - totalLocked;
     }
 }

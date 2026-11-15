@@ -32,12 +32,13 @@ export class App {
         return [
           { label: 'Tổng quan', path: '/dashboard' },
           { label: 'Mua bảo hiểm', path: '/buy-policy' },
+          { label: 'Góp vốn', path: '/lp' },
           { label: 'Hồ sơ', path: '/profile' },
         ];
       case 'admin':
         return [
           { label: 'Hỗ trợ', path: '/support' },
-          { label: 'Quản trị', path: '/admin' },
+          { label: 'Quản trị', path: '/admin/dashboard' },
         ];
       case 'support':
         return [{ label: 'Hỗ trợ', path: '/support' }];

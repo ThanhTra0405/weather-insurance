@@ -17,6 +17,9 @@ interface ILiquidityPoolPayout {
 }
 
 contract PayoutEngine is Ownable, Pausable, ReentrancyGuard {
+    // Cua so tong mua cua han han (value = tong mua 30 ngay ket thuc tai ts)
+    uint256 public constant DROUGHT_WINDOW = 30 days;
+
     PolicyManager public policyManager;
     ILiquidityPoolPayout public liquidityPool;
     IWeatherOracle public oracle;
@@ -46,18 +49,21 @@ contract PayoutEngine is Ownable, Pausable, ReentrancyGuard {
         (, , uint8 perilType, uint256 threshold, , , , ) = policyManager
             .products(pol.productId);
 
-        (uint256 value, uint256 ts) = oracle.getWeatherData(pol.regionId);
+        (uint256 value, uint256 ts) = oracle.getWeatherData(
+            pol.regionId,
+            perilType
+        );
         // startTime đã bao gồm cooling-off (PolicyManager.verifyPolicy set),
         // nên dữ liệu trước mốc này không được tính
         if (ts < pol.startTime) return false;
 
-        // perilType 0 = han han (mua duoi nguong moi kich hoat)
-        // perilType 1, 2 = lu / gio manh (mua/gio tren nguong moi kich hoat)
         if (perilType == 0) {
+            // Han han: cua so 30 ngay phai nam hoan toan trong thoi gian co hieu luc
+            if (ts < pol.startTime + DROUGHT_WINDOW) return false;
             return value < threshold;
-        } else {
-            return value > threshold;
         }
+        // Lu, gio manh
+        return value > threshold;
     }
 
     function checkAndPayout(
@@ -72,7 +78,10 @@ contract PayoutEngine is Ownable, Pausable, ReentrancyGuard {
 
         // Chống mua policy sau khi đã biết trước thiên tai:
         // chỉ nhận dữ liệu oracle sau startTime (= thời điểm duyệt + cooling-off)
-        (, uint256 ts) = oracle.getWeatherData(pol.regionId);
+        (, , uint8 perilType, , , , , ) = policyManager.products(
+            pol.productId
+        );
+        (, uint256 ts) = oracle.getWeatherData(pol.regionId, perilType);
         require(ts >= pol.startTime, "Du lieu truoc thoi diem hieu luc");
 
         require(isThresholdMet(policyId), "Chua dat nguong");

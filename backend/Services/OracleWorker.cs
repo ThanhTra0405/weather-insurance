@@ -1,9 +1,8 @@
-using System.Data.Common;
-using backend.Data;
-using backend.Services.interfaces;
+using backend.Services.Chain;
 
 namespace backend.Services
 {
+    /// Chi con vong lap: moi N phut goi IOracleCycle (logic nam trong OracleCycle).
     public class OracleWorker : BackgroundService
     {
         private readonly IServiceScopeFactory _scopeFactory;
@@ -14,8 +13,7 @@ namespace backend.Services
         {
             _scopeFactory = scopeFactory;
             _logger = logger;
-            var minutes = config.GetValue<int>("Blockchain:OracleIntervalMinutes", 30);
-            _interval = TimeSpan.FromMinutes(minutes);
+            _interval = TimeSpan.FromMinutes(config.GetValue<int>("Blockchain:OracleIntervalMinutes", 30));
         }
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -24,100 +22,27 @@ namespace backend.Services
             {
                 try
                 {
-                    await RunOnceAsync(stoppingToken);
+                    using var scope = _scopeFactory.CreateScope();
+                    var cycle = scope.ServiceProvider.GetRequiredService<IOracleCycle>();
+                    var r = await cycle.RunAsync(refreshWeather: true, stoppingToken);
+                    _logger.LogInformation("Oracle xong: gui {S}, payout {P}, dong {E}, loi {Err}",
+                        r.SubmittedCount, r.PayoutCount, r.ExpiredCount, r.Errors.Count);
+                }
+                catch (OracleBusyException)
+                {
+                    _logger.LogInformation("Bo qua vong oracle vi dang co vong khac chay");
+                }
+                catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+                {
+                    break;
                 }
                 catch (Exception ex)
                 {
                     _logger.LogError(ex, "Loi khi chay OracleWorker");
                 }
 
-                await Task.Delay(_interval, stoppingToken);
-            }
-        }
-
-        private async Task RunOnceAsync(CancellationToken ct)
-        {
-            using var scope = _scopeFactory.CreateScope();
-            var weatherService = scope.ServiceProvider.GetRequiredService<IWeatherService>();
-            var oracleSubmitter = scope.ServiceProvider.GetRequiredService<IOracleSubmitter>();
-            var regionService = scope.ServiceProvider.GetRequiredService<IRegionService>();
-            var policyManager = scope.ServiceProvider.GetRequiredService<IPolicyManagerClient>();
-            var payoutEngine = scope.ServiceProvider.GetRequiredService<IPayoutEngineClient>();
-
-            var snapshot = await policyManager.GetSnapshotAsync(ct);
-            _logger.LogInformation(
-                "Snapshot: {Active} policy dang hieu luc, {Expirable} policy can dong",
-                snapshot.Active.Count, snapshot.Expirable.Count);
-
-            // 1. Đẩy dữ liệu oracle cho từng vùng đang có policy hiệu lực (mỗi vùng 1 lần)
-            var regions = snapshot.Active
-                .GroupBy(p => Convert.ToHexString(p.RegionId))
-                .Select(g => g.First());
-
-            foreach (var p in regions)
-            {
-                ct.ThrowIfCancellationRequested();
-                try
-                {
-                    var lat = (decimal)p.Lat / 1_000_000m;
-                    var lng = (decimal)p.Lng / 1_000_000m;
-
-                    var regionId = regionService.ComputeRegionId(lat, lng);
-                    var weather = await weatherService.GetRainfallLast30DaysAsync(lat, lng, ct);
-                    var txHash = await oracleSubmitter.SubmitWeatherDataAsync(regionId, weather.Value, weather.Timestamp, ct);
-                    _logger.LogInformation("Da gui du lieu oracle cho vung cua policy {PolicyId}, tx = {TxHash}", p.Id, txHash);
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogError(ex, "Loi gui oracle cho policy {PolicyId}", p.Id);
-                }
-            }
-
-            // 2. Policy nào đạt ngưỡng thì kích hoạt payout
-            foreach (var p in snapshot.Active)
-            {
-                ct.ThrowIfCancellationRequested();
-                var id = (ulong)p.Id;
-                try
-                {
-                    if (!await payoutEngine.IsThresholdMetAsync(id, ct)) continue;
-
-                    var txHash = await payoutEngine.CheckAndPayoutAsync(id, ct);
-                    _logger.LogInformation("Da payout policy {PolicyId}, tx = {TxHash}", id, txHash);
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogError(ex, "Loi payout policy {PolicyId}", id);
-                }
-            }
-
-            // 3. Policy quá hạn: đóng và mở khoá coverage (chưa duyệt thì hoàn premium)
-            foreach (var p in snapshot.Expirable)
-            {
-                ct.ThrowIfCancellationRequested();
-                var id = (ulong)p.Id;
-                try
-                {
-                    var txHash = await policyManager.ExpirePolicyAsync(id, ct);
-                    _logger.LogInformation("Da dong policy het han {PolicyId}, tx = {TxHash}", id, txHash);
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogError(ex, "Loi expire policy {PolicyId}", id);
-                }
-            }
-        }
-        public async Task SaveSafeAsync(AppDbContext appDbContext, Action add, CancellationToken ct)
-        {
-            try
-            {
-                add();
-                await appDbContext.SaveChangesAsync(ct);
-            }
-            catch (Exception ex)
-            {
-                appDbContext.ChangeTracker.Clear();
-                _logger.LogError(ex, "Loi ghi lich su vao DB");
+                try { await Task.Delay(_interval, stoppingToken); }
+                catch (OperationCanceledException) { break; }
             }
         }
     }

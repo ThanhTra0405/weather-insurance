@@ -1,12 +1,8 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
 using System.Numerics;
-using System.Threading.Tasks;
+using backend.Services.Chain;
 using backend.Services.interfaces;
 using Nethereum.ABI.FunctionEncoding.Attributes;
 using Nethereum.RPC.Eth.DTOs;
-using Nethereum.Web3;
 
 namespace backend.Services
 {
@@ -26,13 +22,35 @@ namespace backend.Services
         [Parameter("uint8", "status", 11)] public byte Status { get; set; }
     }
 
+    /// Ket qua products(uint256): 8 field theo dung thu tu struct PolicyProduct.
+    [FunctionOutput]
+    public class ProductDTO : IFunctionOutputDTO
+    {
+        [Parameter("uint256", "id", 1)] public BigInteger Id { get; set; }
+        [Parameter("string", "name", 2)] public string Name { get; set; } = "";
+        [Parameter("uint8", "perilType", 3)] public byte PerilType { get; set; }
+        [Parameter("uint256", "threshold", 4)] public BigInteger Threshold { get; set; }
+        [Parameter("uint256", "durationDays", 5)] public BigInteger DurationDays { get; set; }
+        [Parameter("uint256", "premium", 6)] public BigInteger Premium { get; set; }
+        [Parameter("uint256", "coverageAmount", 7)] public BigInteger CoverageAmount { get; set; }
+        [Parameter("bool", "active", 8)] public bool Active { get; set; }
+    }
+
+    [FunctionOutput]
+    public class EvidenceDTO : IFunctionOutputDTO
+    {
+        [Parameter("bytes32", "fieldPhotoHash", 1)] public byte[] FieldPhotoHash { get; set; } = Array.Empty<byte>();
+        [Parameter("bytes32", "documentHash", 2)] public byte[] DocumentHash { get; set; } = Array.Empty<byte>();
+        [Parameter("uint256", "submittedAt", 3)] public BigInteger SubmittedAt { get; set; }
+    }
+
     public record PendingPolicyDTO(
         ulong PolicyId, string Holder, BigInteger Lat, BigInteger Lng,
         byte[] RegionId, string CoverageAmountWei, BigInteger EndTime
     );
 
-    /// Ảnh chụp trạng thái policy tại thời điểm block mới nhất.
-    /// Active: đang hiệu lực (chưa quá hạn). Expirable: chưa duyệt hoặc đang hiệu lực nhưng đã quá hạn.
+    /// Anh chup trang thai policy tai block moi nhat.
+    /// Active: dang hieu luc (chua qua han). Expirable: chua duyet hoac dang hieu luc nhung da qua han.
     public record PolicySnapshot(
         List<PolicyOutputDTO> Active,
         List<PolicyOutputDTO> Expirable,
@@ -44,97 +62,105 @@ namespace backend.Services
         private const byte StatusPending = 0;
         private const byte StatusActive = 1;
 
-        private const string PolicyManagerAbi = @"
+        private const string PolicyManagerAbi = """
         [
-        {
-            ""inputs"": [
-            { ""internalType"": ""uint256"", ""name"": ""policyId"", ""type"": ""uint256"" },
-            { ""internalType"": ""bool"", ""name"": ""approved"", ""type"": ""bool"" }
+          {
+            "inputs": [
+              { "internalType": "uint256", "name": "policyId", "type": "uint256" },
+              { "internalType": "bool", "name": "approved", "type": "bool" }
             ],
-            ""name"": ""verifyPolicy"", ""outputs"": [], ""stateMutability"": ""nonpayable"", ""type"": ""function""
-        },
-        {
-            ""inputs"": [
-            { ""internalType"": ""uint256"", ""name"": ""policyId"", ""type"": ""uint256"" }
+            "name": "verifyPolicy", "outputs": [], "stateMutability": "nonpayable", "type": "function"
+          },
+          {
+            "inputs": [{ "internalType": "uint256", "name": "policyId", "type": "uint256" }],
+            "name": "expirePolicy", "outputs": [], "stateMutability": "nonpayable", "type": "function"
+          },
+          {
+            "inputs": [], "name": "nextPolicyId",
+            "outputs": [{ "internalType": "uint256", "name": "", "type": "uint256" }],
+            "stateMutability": "view", "type": "function"
+          },
+          {
+            "inputs": [], "name": "nextProductId",
+            "outputs": [{ "internalType": "uint256", "name": "", "type": "uint256" }],
+            "stateMutability": "view", "type": "function"
+          },
+          {
+            "inputs": [{ "internalType": "uint256", "name": "", "type": "uint256" }],
+            "name": "products",
+            "outputs": [
+              { "internalType": "uint256", "name": "id", "type": "uint256" },
+              { "internalType": "string", "name": "name", "type": "string" },
+              { "internalType": "uint8", "name": "perilType", "type": "uint8" },
+              { "internalType": "uint256", "name": "threshold", "type": "uint256" },
+              { "internalType": "uint256", "name": "durationDays", "type": "uint256" },
+              { "internalType": "uint256", "name": "premium", "type": "uint256" },
+              { "internalType": "uint256", "name": "coverageAmount", "type": "uint256" },
+              { "internalType": "bool", "name": "active", "type": "bool" }
             ],
-            ""name"": ""expirePolicy"", ""outputs"": [], ""stateMutability"": ""nonpayable"", ""type"": ""function""
-        },
-        {
-            ""inputs"": [], ""name"": ""nextPolicyId"",
-            ""outputs"": [{ ""internalType"": ""uint256"", ""name"": """", ""type"": ""uint256"" }],
-            ""stateMutability"": ""view"", ""type"": ""function""
-        },
-        {
-            ""inputs"": [{ ""internalType"": ""uint256"", ""name"": ""policyId"", ""type"": ""uint256"" }],
-            ""name"": ""getPolicy"",
-            ""outputs"": [{
-            ""components"": [
-                { ""internalType"": ""uint256"", ""name"": ""id"", ""type"": ""uint256"" },
-                { ""internalType"": ""uint256"", ""name"": ""productId"", ""type"": ""uint256"" },
-                { ""internalType"": ""address"", ""name"": ""holder"", ""type"": ""address"" },
-                { ""internalType"": ""int256"", ""name"": ""lat"", ""type"": ""int256"" },
-                { ""internalType"": ""int256"", ""name"": ""lng"", ""type"": ""int256"" },
-                { ""internalType"": ""bytes32"", ""name"": ""regionId"", ""type"": ""bytes32"" },
-                { ""internalType"": ""uint256"", ""name"": ""startTime"", ""type"": ""uint256"" },
-                { ""internalType"": ""uint256"", ""name"": ""endTime"", ""type"": ""uint256"" },
-                { ""internalType"": ""uint256"", ""name"": ""premiumPaid"", ""type"": ""uint256"" },
-                { ""internalType"": ""uint256"", ""name"": ""coverageAmount"", ""type"": ""uint256"" },
-                { ""internalType"": ""uint8"", ""name"": ""status"", ""type"": ""uint8"" }
+            "stateMutability": "view", "type": "function"
+          },
+          {
+            "inputs": [{ "internalType": "uint256", "name": "", "type": "uint256" }],
+            "name": "evidenceOf",
+            "outputs": [
+              { "internalType": "bytes32", "name": "fieldPhotoHash", "type": "bytes32" },
+              { "internalType": "bytes32", "name": "documentHash", "type": "bytes32" },
+              { "internalType": "uint256", "name": "submittedAt", "type": "uint256" }
             ],
-            ""internalType"": ""struct PolicyManager.Policy"", ""name"": """", ""type"": ""tuple""
+            "stateMutability": "view", "type": "function"
+          },
+          {
+            "inputs": [{ "internalType": "uint256", "name": "policyId", "type": "uint256" }],
+            "name": "getPolicy",
+            "outputs": [{
+              "components": [
+                { "internalType": "uint256", "name": "id", "type": "uint256" },
+                { "internalType": "uint256", "name": "productId", "type": "uint256" },
+                { "internalType": "address", "name": "holder", "type": "address" },
+                { "internalType": "int256", "name": "lat", "type": "int256" },
+                { "internalType": "int256", "name": "lng", "type": "int256" },
+                { "internalType": "bytes32", "name": "regionId", "type": "bytes32" },
+                { "internalType": "uint256", "name": "startTime", "type": "uint256" },
+                { "internalType": "uint256", "name": "endTime", "type": "uint256" },
+                { "internalType": "uint256", "name": "premiumPaid", "type": "uint256" },
+                { "internalType": "uint256", "name": "coverageAmount", "type": "uint256" },
+                { "internalType": "uint8", "name": "status", "type": "uint8" }
+              ],
+              "internalType": "struct PolicyManager.Policy", "name": "", "type": "tuple"
             }],
-            ""stateMutability"": ""view"", ""type"": ""function""
-        }
-        ]";
+            "stateMutability": "view", "type": "function"
+          }
+        ]
+        """;
 
-        private readonly Web3 _web3;
+        private readonly IChainContext _ctx;
         private readonly string _policyManagerAddress;
         private readonly ILogger<PolicyManagerClient> _logger;
 
-        public PolicyManagerClient(IConfiguration config, ILogger<PolicyManagerClient> logger)
+        public PolicyManagerClient(IChainContext ctx, IConfiguration config, ILogger<PolicyManagerClient> logger)
         {
-            var rpcUrl = config["Blockchain:RpcUrl"]
-                ?? throw new InvalidOperationException("Thieu Blockchain:RpcUrl");
-            // Dùng chung key backend signer, hoặc key riêng của verifier/admin nếu khác
-            var privateKey = config["Blockchain:VerifierPrivateKey"]
-                ?? config["Blockchain:OracleBackendPrivateKey"]
-                ?? throw new InvalidOperationException("Thieu private key verifier");
+            _ctx = ctx;
             _policyManagerAddress = config["Blockchain:PolicyManagerAddress"]
                 ?? throw new InvalidOperationException("Thieu Blockchain:PolicyManagerAddress");
-
-            var account = new Nethereum.Web3.Accounts.Account(privateKey);
-            _web3 = new Web3(account, rpcUrl);
             _logger = logger;
         }
 
+        private Nethereum.Contracts.Contract Contract =>
+            _ctx.Web3.Eth.GetContract(PolicyManagerAbi, _policyManagerAddress);
+
         public async Task<string> VerifyPolicyAsync(ulong policyId, bool approved, CancellationToken ct = default)
         {
-            var contract = _web3.Eth.GetContract(PolicyManagerAbi, _policyManagerAddress);
-            var function = contract.GetFunction("verifyPolicy");
-
             _logger.LogInformation("Goi verifyPolicy: policyId={PolicyId} approved={Approved}", policyId, approved);
-
-            return await function.SendTransactionAsync(
-                from: _web3.TransactionManager.Account.Address,
-                gas: new Nethereum.Hex.HexTypes.HexBigInteger(300_000),
-                value: null,
-                functionInput: new object[] { new BigInteger(policyId), approved }
-            );
+            return await ChainTx.SendAsync(_ctx, Contract.GetFunction("verifyPolicy"), 300_000, ct,
+                new BigInteger(policyId), approved);
         }
 
         public async Task<string> ExpirePolicyAsync(ulong policyId, CancellationToken ct = default)
         {
-            var contract = _web3.Eth.GetContract(PolicyManagerAbi, _policyManagerAddress);
-            var function = contract.GetFunction("expirePolicy");
-
             _logger.LogInformation("Goi expirePolicy: policyId={PolicyId}", policyId);
-
-            return await function.SendTransactionAsync(
-                from: _web3.TransactionManager.Account.Address,
-                gas: new Nethereum.Hex.HexTypes.HexBigInteger(300_000),
-                value: null,
-                functionInput: new object[] { new BigInteger(policyId) }
-            );
+            return await ChainTx.SendAsync(_ctx, Contract.GetFunction("expirePolicy"), 300_000, ct,
+                new BigInteger(policyId));
         }
 
         public async Task<List<PendingPolicyDTO>> GetPendingPoliciesAsync(CancellationToken ct = default)
@@ -152,15 +178,12 @@ namespace backend.Services
         {
             var all = await ReadAllPoliciesAsync();
 
-            // Dùng thời gian của block mới nhất (khớp block.timestamp mà contract so sánh,
-            // kể cả khi Hardhat được tua thời gian bằng time.increase)
-            var block = await _web3.Eth.Blocks.GetBlockWithTransactionsHashesByNumber
+            // Dung thoi gian block moi nhat (khop block.timestamp ma contract so sanh)
+            var block = await _ctx.Web3.Eth.Blocks.GetBlockWithTransactionsHashesByNumber
                 .SendRequestAsync(BlockParameter.CreateLatest());
             BigInteger now = block.Timestamp.Value;
 
-            var active = all
-                .Where(p => p.Status == StatusActive && p.EndTime >= now)
-                .ToList();
+            var active = all.Where(p => p.Status == StatusActive && p.EndTime >= now).ToList();
             var expirable = all
                 .Where(p => (p.Status == StatusActive || p.Status == StatusPending) && p.EndTime < now)
                 .ToList();
@@ -168,33 +191,37 @@ namespace backend.Services
             return new PolicySnapshot(active, expirable, now);
         }
 
-        public async Task<ulong> GetNextPolicyIdAsync(CancellationToken ct = default)
+        public async Task<ulong> GetNextPolicyIdAsync(CancellationToken ct = default) =>
+            (ulong)await Contract.GetFunction("nextPolicyId").CallAsync<BigInteger>();
+
+        public async Task<ulong> GetNextProductIdAsync(CancellationToken ct = default) =>
+            (ulong)await Contract.GetFunction("nextProductId").CallAsync<BigInteger>();
+
+        public async Task<PolicyOutputDTO> GetPolicyAsync(ulong id, CancellationToken ct = default) =>
+            await Contract.GetFunction("getPolicy")
+                .CallDeserializingToObjectAsync<PolicyOutputDTO>(new BigInteger(id));
+
+        public async Task<ProductDTO> GetProductAsync(ulong productId, CancellationToken ct = default) =>
+            await Contract.GetFunction("products")
+                .CallDeserializingToObjectAsync<ProductDTO>(new BigInteger(productId));
+
+        public async Task<bool> HasEvidenceOnChainAsync(ulong policyId, CancellationToken ct = default)
         {
-            var fn = _web3.Eth.GetContract(PolicyManagerAbi, _policyManagerAddress).GetFunction("nextPolicyId");
-            return (ulong)await fn.CallAsync<BigInteger>();
+            var e = await Contract.GetFunction("evidenceOf")
+                .CallDeserializingToObjectAsync<EvidenceDTO>(new BigInteger(policyId));
+            return e.SubmittedAt != 0;
         }
 
-        public async Task<PolicyOutputDTO> GetPolicyAsync(ulong id, CancellationToken ct = default)
-        {
-            var fn = _web3.Eth.GetContract(PolicyManagerAbi, _policyManagerAddress).GetFunction("getPolicy");
-            return await fn.CallDeserializingToObjectAsync<PolicyOutputDTO>(new BigInteger(id));
-        }
-
-        // Đọc toàn bộ policy: O(n) lệnh gọi RPC mỗi lần, đủ cho demo.
-        // Khi nhiều policy thì chuyển sang lắng nghe event PolicyCreated/PolicyVerified.
+        // Doc toan bo policy: O(n) RPC, du cho demo. ChainIndexer + policies_cache se thay the.
         private async Task<List<PolicyOutputDTO>> ReadAllPoliciesAsync()
         {
-            var contract = _web3.Eth.GetContract(PolicyManagerAbi, _policyManagerAddress);
-            var nextIdFn = contract.GetFunction("nextPolicyId");
+            var contract = Contract;
+            var nextId = await contract.GetFunction("nextPolicyId").CallAsync<BigInteger>();
             var getPolicyFn = contract.GetFunction("getPolicy");
-
-            BigInteger nextId = await nextIdFn.CallAsync<BigInteger>();
             var result = new List<PolicyOutputDTO>();
 
             for (BigInteger i = 1; i < nextId; i++)
-            {
                 result.Add(await getPolicyFn.CallDeserializingToObjectAsync<PolicyOutputDTO>(i));
-            }
 
             return result;
         }

@@ -6,6 +6,7 @@ using backend.Options;
 using backend.Repository;
 using backend.Services;
 using backend.Services.App;
+using backend.Services.Chain;
 using backend.Services.interfaces;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Diagnostics;
@@ -13,7 +14,6 @@ using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
-using WeatherInsurance.Backend.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -29,16 +29,8 @@ builder.Services.AddControllers()
 // Đặt TRƯỚC khối chain của A để DatabaseInitializer (migrate + seed) chạy xong trước các hosted service của A.
 builder.Services.AddAppServices(builder.Configuration);
 
-// ===== CHAIN (A) — giữ nguyên, A sẽ chuyển sang AddChainServices =====
-builder.Services.AddHttpClient<IWeatherService, WeatherService>();
-builder.Services.AddSingleton<INearestStationService, NearestStationService>();
-builder.Services.AddSingleton<IRegionService, RegionService>();
-builder.Services.AddSingleton<IOracleSubmitter, OracleSubmitter>();
-builder.Services.AddSingleton<IPolicyManagerClient, PolicyManagerClient>();
-builder.Services.AddSingleton<IPayoutEngineClient, PayoutEngineClient>();
-builder.Services.AddHostedService<OracleWorker>();
-builder.Services.AddSingleton<StationRepository>();
-// ===== HẾT KHỐI CHAIN (A) =====
+// ===== CHAIN (A): IChainContext, indexer, oracle, faucet, admin client =====
+builder.Services.AddChainServices(builder.Configuration);
 
 // ===== JWT =====
 var jwt = builder.Configuration.GetSection(JwtOptions.SectionName).Get<JwtOptions>() ?? new JwtOptions();
@@ -75,12 +67,6 @@ var corsOrigins = builder.Configuration.GetSection("Cors:Origins").Get<string[]>
 if (corsOrigins == null || corsOrigins.Length == 0)
     corsOrigins = new[] { "http://localhost:4200" };
 
-builder.Services.AddDbContext<AppDbContext>(o =>
-{
-    o.UseNpgsql(builder.Configuration.GetConnectionString("DateBaseConnetion"));
-});
-
-builder.Services.AddHostedService<PolicySyncWorker>();
 
 builder.Services.AddCors(options =>
 {

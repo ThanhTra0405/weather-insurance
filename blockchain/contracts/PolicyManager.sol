@@ -160,6 +160,9 @@ contract PolicyManager is Ownable, Pausable, ReentrancyGuard {
             durationDays > 0 && durationDays <= 365,
             "thoi gian khong hop le"
         );
+        if (perilType == 0) {
+            require(durationDays >= 30, "han han can it nhat 30 ngay");
+        }
         require(premium > 0, "phi phai dong lon hon 0");
         require(
             coverageAmount > premium,

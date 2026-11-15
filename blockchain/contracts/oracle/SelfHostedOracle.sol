@@ -10,11 +10,17 @@ contract SelfHostedOracle is IWeatherOracle, Ownable {
         uint256 timestamp;
     }
 
-    mapping(bytes32 => Data) private data;
+    // Luu theo (regionId, perilType): 0 = han han, 1 = lu, 2 = gio manh
+    mapping(bytes32 => mapping(uint8 => Data)) private data;
     address public backendSigner;
 
     event BackendSignerSet(address indexed signer);
-    event WeatherDataSubmitted(bytes32 indexed regionId, uint256 value, uint256 timestamp);
+    event WeatherDataSubmitted(
+        bytes32 indexed regionId,
+        uint8 indexed perilType,
+        uint256 value,
+        uint256 timestamp
+    );
 
     modifier onlyBackend() {
         require(msg.sender == backendSigner, "Khong phai backend signer");
@@ -34,15 +40,20 @@ contract SelfHostedOracle is IWeatherOracle, Ownable {
 
     function submitWeatherData(
         bytes32 regionId,
+        uint8 perilType,
         uint256 value,
         uint256 timestamp
     ) external onlyBackend {
-        data[regionId] = Data(value, timestamp);
-        emit WeatherDataSubmitted(regionId, value, timestamp);
+        require(perilType <= 2, "peril khong hop le");
+        data[regionId][perilType] = Data(value, timestamp);
+        emit WeatherDataSubmitted(regionId, perilType, value, timestamp);
     }
 
-    function getWeatherData(bytes32 regionId) external view returns (uint256, uint256) {
-        Data memory d = data[regionId];
+    function getWeatherData(
+        bytes32 regionId,
+        uint8 perilType
+    ) external view returns (uint256, uint256) {
+        Data memory d = data[regionId][perilType];
         return (d.value, d.timestamp);
     }
 }

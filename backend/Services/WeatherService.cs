@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using backend.Models;
 using backend.Services.interfaces;
@@ -6,6 +7,8 @@ namespace backend.Services
 {
     public class WeatherService : IWeatherService
     {
+        private static readonly int[] RetryDelaysMs = { 2000, 5000 };
+
         private readonly HttpClient _http;
         private readonly ILogger<WeatherService> _logger;
 
@@ -15,37 +18,59 @@ namespace backend.Services
             _logger = logger;
         }
 
-        public async Task<WeatherPoint> GetRainfallLast30DaysAsync(decimal lat, decimal lng, CancellationToken ct = default)
+        public async Task<WeatherSnapshot> GetWeatherAsync(decimal lat, decimal lng, CancellationToken ct = default)
         {
-            var endDate = DateTime.UtcNow.Date;
-            var startDate = endDate.AddDays(-30);
-
-            var url = $"https://api.open-meteo.com/v1/forecast" +
-                      $"?latitude={lat.ToString(System.Globalization.CultureInfo.InvariantCulture)}" +
-                      $"&longitude={lng.ToString(System.Globalization.CultureInfo.InvariantCulture)}" +
-                      $"&daily=precipitation_sum" +
-                      $"&start_date={startDate:yyyy-MM-dd}" +
-                      $"&end_date={endDate:yyyy-MM-dd}" +
-                      $"&timezone=auto";
+            // 30 phan tu: 29 ngay truoc + hom nay
+            var url = string.Create(CultureInfo.InvariantCulture,
+                $"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lng}" +
+                $"&daily=precipitation_sum,wind_gusts_10m_max&past_days=29&forecast_days=1&timezone=Asia%2FBangkok");
 
             _logger.LogInformation("Goi Open-Meteo: {Url}", url);
 
-            using var response = await _http.GetAsync(url, ct);
-            response.EnsureSuccessStatusCode();
-
-            var json = await response.Content.ReadAsStringAsync(ct);
-            using var doc = JsonDocument.Parse(json);
-
-            var precipArray = doc.RootElement.GetProperty("daily").GetProperty("precipitation_sum");
-            decimal totalMm = 0;
-            foreach (var v in precipArray.EnumerateArray())
+            for (var attempt = 0; ; attempt++)
             {
-                if (v.ValueKind == JsonValueKind.Number)
-                    totalMm += v.GetDecimal();
-            }
+                try
+                {
+                    using var response = await _http.GetAsync(url, ct);
+                    if ((int)response.StatusCode >= 500)
+                        throw new HttpRequestException($"Open-Meteo tra ve {(int)response.StatusCode}");
+                    response.EnsureSuccessStatusCode();
 
-            long timestamp = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-            return new WeatherPoint(totalMm, timestamp);
+                    using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync(ct));
+                    var daily = doc.RootElement.GetProperty("daily");
+                    var rain = ReadArray(daily.GetProperty("precipitation_sum"));
+                    var gust = ReadArray(daily.GetProperty("wind_gusts_10m_max"));
+
+                    return new WeatherSnapshot(
+                        SumOrNull(rain),
+                        SumOrNull(rain.TakeLast(3)),
+                        MaxOrNull(gust.TakeLast(3)),
+                        DateTimeOffset.UtcNow.ToUnixTimeSeconds());
+                }
+                catch (Exception ex) when (attempt < RetryDelaysMs.Length && !ct.IsCancellationRequested
+                                           && (ex is HttpRequestException || ex is TaskCanceledException))
+                {
+                    _logger.LogWarning(ex, "Open-Meteo loi, thu lai lan {Attempt}", attempt + 1);
+                    await Task.Delay(RetryDelaysMs[attempt], ct);
+                }
+            }
+        }
+
+        private static List<decimal?> ReadArray(JsonElement e) =>
+            e.EnumerateArray()
+             .Select(x => x.ValueKind == JsonValueKind.Number ? (decimal?)x.GetDecimal() : null)
+             .ToList();
+
+        private static decimal? SumOrNull(IEnumerable<decimal?> xs)
+        {
+            var v = xs.Where(x => x.HasValue).Select(x => x!.Value).ToList();
+            return v.Count == 0 ? null : v.Sum();
+        }
+
+        private static decimal? MaxOrNull(IEnumerable<decimal?> xs)
+        {
+            var v = xs.Where(x => x.HasValue).Select(x => x!.Value).ToList();
+            return v.Count == 0 ? null : v.Max();
         }
     }
 }

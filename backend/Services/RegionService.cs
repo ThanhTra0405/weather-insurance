@@ -9,10 +9,15 @@ namespace backend.Services
     {
         private const decimal GridSizeDeg = 0.2m;
 
+        private static decimal RoundToGrid(decimal v) =>
+            Math.Round(v / GridSizeDeg, 0, MidpointRounding.AwayFromZero) * GridSizeDeg;
+
+        public (decimal lat, decimal lng) GetRegionCenter(decimal lat, decimal lng) =>
+            (RoundToGrid(lat), RoundToGrid(lng));
+
         public string ComputeRegionId(decimal lat, decimal lng)
         {
-            decimal roundedLat = Math.Round(lat / GridSizeDeg, 0, MidpointRounding.AwayFromZero) * GridSizeDeg;
-            decimal roundedLng = Math.Round(lng / GridSizeDeg, 0, MidpointRounding.AwayFromZero) * GridSizeDeg;
+            var (roundedLat, roundedLng) = GetRegionCenter(lat, lng);
 
             BigInteger latScaled = (BigInteger)Math.Round(roundedLat * 1_000_000m, 0, MidpointRounding.AwayFromZero);
             BigInteger lngScaled = (BigInteger)Math.Round(roundedLng * 1_000_000m, 0, MidpointRounding.AwayFromZero);
