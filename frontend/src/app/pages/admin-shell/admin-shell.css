@@ -1,0 +1,113 @@
+.admin-shell {
+  max-width: 1280px;
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: 220px minmax(0, 1fr);
+  gap: 8px;
+  align-items: start;
+}
+
+.admin-side {
+  position: sticky;
+  top: var(--header-height, 64px);
+  align-self: start;
+  padding: 24px 12px 24px 16px;
+  min-height: calc(100vh - var(--header-height, 64px));
+  border-right: 1px solid var(--color-border);
+  background: var(--color-bg);
+}
+
+.admin-side .side-group + .side-group {
+  margin-top: 20px;
+}
+
+.admin-side .side-title {
+  font-size: 11.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--color-text-muted);
+  margin: 0 0 6px 10px;
+}
+
+.admin-side .side-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.admin-side .side-nav a {
+  display: block;
+  padding: 9px 12px;
+  border-radius: var(--radius-sm);
+  font-size: 14.5px;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+}
+
+.admin-side .side-nav a:hover {
+  background: var(--color-bg-secondary);
+  color: var(--color-primary-dark);
+}
+
+.admin-side .side-nav a.active {
+  background: var(--color-primary-light);
+  color: var(--color-primary-dark);
+}
+
+.admin-content {
+  min-width: 0;
+  padding: 0 8px;
+}
+
+/* Điện thoại / máy tính bảng nhỏ: thanh bên thành dải cuộn ngang phía trên nội dung */
+@media (max-width: 860px) {
+  .admin-shell {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0;
+  }
+
+  .admin-side {
+    position: static;
+    min-height: 0;
+    display: flex;
+    gap: 14px;
+    overflow-x: auto;
+    padding: 10px 12px;
+    border-right: none;
+    border-bottom: 1px solid var(--color-border);
+    background: var(--color-bg-secondary);
+  }
+
+  .admin-side .side-group + .side-group {
+    margin-top: 0;
+  }
+
+  .admin-side .side-group {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
+  }
+
+  .admin-side .side-title {
+    margin: 0 2px 0 0;
+    white-space: nowrap;
+  }
+
+  .admin-side .side-nav {
+    flex-direction: row;
+    gap: 4px;
+  }
+
+  .admin-side .side-nav a {
+    white-space: nowrap;
+    padding: 7px 12px;
+    border-radius: 999px;
+    font-size: 14px;
+  }
+
+  .admin-content {
+    padding: 0;
+  }
+}

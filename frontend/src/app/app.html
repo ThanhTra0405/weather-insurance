@@ -12,7 +12,12 @@
       <span class="nav-spacer"></span>
     }
 
-    <app-account-menu />
+    <div class="header-right">
+      @if (auth.role() === 'farmer') {
+        <app-notification-bell />
+      }
+      <app-account-menu />
+    </div>
   </div>
 </header>
 

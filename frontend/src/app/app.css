@@ -47,6 +47,12 @@
   flex: 1;
 }
 
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
 @media (max-width: 640px) {
   .header-inner {
     flex-wrap: wrap;
@@ -58,8 +64,12 @@
   .nav-links {
     order: 3;
     width: 100%;
-    justify-content: center;
-    gap: 24px;
+    justify-content: flex-start;
+    gap: 18px;
+    overflow-x: auto;
+    white-space: nowrap;
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: 2px;
   }
   .logo {
     font-size: 16px;

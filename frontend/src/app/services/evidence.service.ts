@@ -7,6 +7,16 @@ export interface EvidenceFiles {
   document: File;
 }
 
+/** Kết quả POST /api/evidence/{policyId}: hash do server tính (so với hash tính cục bộ trước khi ghi lên chain). */
+export interface EvidenceUploadResult {
+  policyId: number;
+  selfieHash: string;
+  fieldPhotoHash: string;
+  documentHash: string;
+  exifGpsPresent: boolean;
+  distanceMeters: number | null;
+}
+
 export interface GpsInfo {
   lat: number;
   lng: number;
@@ -27,7 +37,7 @@ export class EvidenceService {
   }
 
   /** Gửi 3 ảnh + toạ độ lên backend (cần đăng nhập nông dân). Chủ policy do server lấy từ JWT. */
-  async upload(policyId: bigint, files: EvidenceFiles, gps: GpsInfo, holder: string): Promise<void> {
+  async upload(policyId: bigint, files: EvidenceFiles, gps: GpsInfo, holder: string): Promise<EvidenceUploadResult> {
     const form = new FormData();
     form.append('holder', holder); // server bỏ qua, giữ để tương thích
     form.append('lat', String(gps.lat));
@@ -38,9 +48,11 @@ export class EvidenceService {
     form.append('document', files.document);
 
     try {
-      await this.api.postForm(`/api/evidence/${policyId}`, form);
+      return await this.api.postForm<EvidenceUploadResult>(`/api/evidence/${policyId}`, form);
     } catch (e) {
-      throw new Error(e instanceof ApiError && e.message ? e.message : 'Tải ảnh lên máy chủ thất bại');
+      // Giữ nguyên ApiError (message tiếng Việt của server) để nơi gọi xử lý theo status, ví dụ 409.
+      if (e instanceof ApiError) throw e;
+      throw new Error('Tải ảnh lên máy chủ thất bại');
     }
   }
 }

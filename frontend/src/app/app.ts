@@ -2,6 +2,7 @@ import { Component, computed, inject } from '@angular/core';
 import { RouterOutlet, RouterLink, RouterLinkActive } from '@angular/router';
 import { AuthService } from './services/auth.service';
 import { AccountMenuComponent } from './components/account-menu/account-menu';
+import { NotificationBellComponent } from './components/notification-bell/notification-bell';
 import { ToastContainerComponent } from './components/toast-container/toast-container';
 
 interface NavItem {
@@ -12,7 +13,7 @@ interface NavItem {
 @Component({
   selector: 'app-root',
   standalone: true,
-  imports: [RouterOutlet, RouterLink, RouterLinkActive, AccountMenuComponent, ToastContainerComponent],
+  imports: [RouterOutlet, RouterLink, RouterLinkActive, AccountMenuComponent, NotificationBellComponent, ToastContainerComponent],
   templateUrl: './app.html',
   styleUrl: './app.css',
 })
@@ -24,7 +25,7 @@ export class App {
 
   /**
    * Thanh điều hướng theo vai trò. Chưa đăng nhập: không có mục nào (chỉ logo + Đăng nhập/Đăng ký).
-   * Các mục Hỗ trợ, Góp vốn (LP), Ví sẽ thêm khi trang tương ứng có (ngày 2–3).
+   * Farmer: Tổng quan · Mua bảo hiểm · Hỗ trợ · Góp vốn (LP) · Hồ sơ · Ví. Staff: Hỗ trợ · (admin) Quản trị.
    */
   readonly navItems = computed<NavItem[]>(() => {
     switch (this.auth.role()) {
@@ -32,13 +33,15 @@ export class App {
         return [
           { label: 'Tổng quan', path: '/dashboard' },
           { label: 'Mua bảo hiểm', path: '/buy-policy' },
-          { label: 'Góp vốn', path: '/lp' },
+          { label: 'Hỗ trợ', path: '/tickets' },
+          { label: 'Góp vốn (LP)', path: '/lp' },
           { label: 'Hồ sơ', path: '/profile' },
+          { label: 'Ví', path: '/wallet' },
         ];
       case 'admin':
         return [
           { label: 'Hỗ trợ', path: '/support' },
-          { label: 'Quản trị', path: '/admin/dashboard' },
+          { label: 'Quản trị', path: '/admin' },
         ];
       case 'support':
         return [{ label: 'Hỗ trợ', path: '/support' }];

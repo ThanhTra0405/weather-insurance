@@ -1,88 +1,167 @@
 <div class="container admin-page">
-  @if (!isLoggedIn) {
-    <div class="card login-card">
-      <h1>Đăng nhập Admin</h1>
-      <label for="key">Admin key</label>
-      <input id="key" type="password" [ngModel]="keyInput()" (ngModelChange)="keyInput.set($event)" />
-      <button class="btn btn-primary" (click)="login()">Đăng nhập</button>
-    </div>
-  } @else {
-    <div class="admin-header">
-      <h1>Duyệt hồ sơ Policy</h1>
-      <div class="admin-actions">
-        <button class="btn btn-outline" (click)="load()" [disabled]="isLoading()">↻ Tải lại</button>
-        <button class="btn btn-outline" (click)="logout()">Đăng xuất</button>
-      </div>
-    </div>
+  <div class="admin-header">
+    <h1>Duyệt hồ sơ</h1>
+    <button type="button" class="btn btn-outline" (click)="load()" [disabled]="loading()">
+      @if (loading()) { <span class="spinner" aria-hidden="true"></span> Đang tải... } @else { ↻ Tải lại }
+    </button>
+  </div>
 
-    @if (error(); as err) {
-      <p class="error-text">{{ err }}</p>
-    }
-
-    @if (policies().length === 0 && !isLoading()) {
-      <div class="card empty-state"><p>Không có policy nào đang chờ duyệt.</p></div>
-    }
-
-    <div class="policy-list">
-      @for (p of policies(); track p.policyId) {
-        <div class="card admin-policy-card">
-          <div class="policy-top">
-            <span class="policy-id">Policy #{{ p.policyId }}</span>
-            <span class="badge badge-pending">Chờ duyệt</span>
-          </div>
-          <p>Chủ ví: {{ p.holder }}</p>
-          <p>Toạ độ: {{ formatLatLng(p.lat) }}, {{ formatLatLng(p.lng) }}</p>
-
-          @if (ev(p.policyId); as e) {
-            <div class="evidence">
-              @if (e.loading) {
-                <p>Đang tải hồ sơ...</p>
-              } @else if (e.error) {
-                <p class="error-text">{{ e.error }}</p>
-              } @else if (!e.meta) {
-                <p class="error-text">Chưa có ảnh trên máy chủ.</p>
-              } @else {
-                @if (e.images; as img) {
-                  <div class="photos">
-                    <figure><img [src]="img.selfie" alt="Chân dung" /><figcaption>Chân dung</figcaption></figure>
-                    <figure><img [src]="img.field" alt="Ruộng" /><figcaption>Ruộng</figcaption></figure>
-                    <figure><img [src]="img.document" alt="Giấy tờ đất" /><figcaption>Giấy tờ đất</figcaption></figure>
-                  </div>
-                }
-                <ul class="checks">
-                  <li [class.ok]="e.onChain" [class.bad]="!e.onChain">
-                    {{ e.onChain ? 'Đã gửi hash lên blockchain' : 'Chưa gửi hash lên blockchain' }}
-                  </li>
-                  <li [class.ok]="e.hashMatch" [class.bad]="!e.hashMatch">
-                    {{ e.hashMatch ? 'Hash on-chain khớp ảnh trên máy chủ' : 'Hash on-chain KHÔNG khớp ảnh' }}
-                  </li>
-                  <li [class.ok]="!distanceWarning(e.meta)" [class.bad]="distanceWarning(e.meta)">
-                    {{ distanceText(e.meta) }}
-                  </li>
-                  <li>Độ chính xác GPS khai báo: ±{{ e.meta.gpsAccuracy | number: '1.0-0' }} m</li>
-                </ul>
-              }
-              <button class="btn btn-outline" (click)="closeEvidence(p.policyId)">Đóng hồ sơ</button>
-            </div>
-          } @else {
-            <button class="btn btn-outline" (click)="openEvidence(p.policyId)">Xem hồ sơ</button>
-          }
-
-          <div class="review-actions">
-            <button
-              class="btn btn-primary"
-              [disabled]="processingId() === p.policyId || !canApprove(p.policyId)"
-              [title]="canApprove(p.policyId) ? '' : 'Cần xem hồ sơ và hash phải khớp mới duyệt được'"
-              (click)="review(p.policyId, true)"
-            >Duyệt</button>
-            <button
-              class="btn btn-outline"
-              [disabled]="processingId() === p.policyId"
-              (click)="review(p.policyId, false)"
-            >Từ chối</button>
-          </div>
-        </div>
+  @if (result(); as r) {
+    <div class="alert alert-success" role="status">
+      Đã {{ r.approved ? 'duyệt' : 'từ chối' }} policy #{{ r.policyId }}.
+      @if (txUrl(r.txHash); as url) {
+        <a [href]="url" target="_blank" rel="noopener noreferrer">Xem giao dịch</a>
+      } @else {
+        Giao dịch: <span class="mono">{{ shortHash(r.txHash) }}</span>
       }
+      <button type="button" class="link-btn" (click)="dismissResult()">Đóng</button>
     </div>
   }
+
+  @if (error(); as err) {
+    <div class="alert alert-error" role="alert">
+      {{ err }} <button type="button" class="link-btn" (click)="load()">Thử lại</button>
+    </div>
+  }
+
+  @if (endpointMissing()) {
+    <div class="alert alert-warning" role="status">
+      Máy chủ chưa có API danh sách chờ duyệt (đang chờ Người A). Bạn vẫn có thể mở hồ sơ theo mã policy ở ô bên dưới.
+    </div>
+  }
+
+  <form class="card manual" (submit)="$event.preventDefault(); openById()">
+    <label for="manual-id">Mở hồ sơ theo mã policy</label>
+    <div class="manual-row">
+      <input id="manual-id" type="text" inputmode="numeric" placeholder="Ví dụ: 12" [value]="manualId()"
+        (input)="manualId.set($any($event.target).value)" [disabled]="manualBusy()" />
+      <button type="submit" class="btn btn-outline" [disabled]="manualBusy() || manualId().trim().length === 0">
+        @if (manualBusy()) { <span class="spinner" aria-hidden="true"></span> } Mở
+      </button>
+    </div>
+    @if (manualError(); as me) { <p class="field-error">{{ me }}</p> }
+  </form>
+
+  @if (loading() && policies().length === 0) {
+    <div class="card"><p class="muted"><span class="spinner" aria-hidden="true"></span> Đang tải danh sách...</p></div>
+  } @else if (policies().length === 0 && !error() && !endpointMissing()) {
+    <div class="card empty-state"><p>Không có policy nào đang chờ duyệt.</p></div>
+  }
+
+  <div class="policy-list">
+    @for (p of policies(); track p.policyId) {
+      <div class="card admin-policy-card">
+        <div class="policy-top">
+          <span class="policy-id">Policy #{{ p.policyId }}</span>
+          @if (p.hasEvidence === false) {
+            <span class="badge badge-pending">Chưa gửi hồ sơ</span>
+          } @else {
+            <span class="badge badge-pending">Chờ duyệt</span>
+          }
+        </div>
+
+        <dl class="info">
+          @if (p.farmerName) { <dt>Nông dân</dt><dd>{{ p.farmerName }}@if (p.farmerPhone) { · {{ p.farmerPhone }} }</dd> }
+          @if (p.productName) {
+            <dt>Gói</dt>
+            <dd>@if (p.perilType !== null) { <span aria-hidden="true">{{ perilIcon(p.perilType) }}</span> } {{ p.productName }}@if (p.perilType !== null) { ({{ perilLabel(p.perilType) }}) }</dd>
+          }
+          <dt>Ví</dt><dd class="mono">{{ shortAddress(p.holder) }}</dd>
+          <dt>Vị trí</dt>
+          <dd>
+            {{ (p.latE6 / 1000000).toFixed(6) }}, {{ (p.lngE6 / 1000000).toFixed(6) }}
+            · <a [href]="mapUrl(p.latE6, p.lngE6)" target="_blank" rel="noopener noreferrer">Bản đồ</a>
+          </dd>
+          <dt>Bồi thường</dt><dd>{{ formatEth(p.coverageWei) }} ETH</dd>
+          @if (p.evidenceSubmittedAt) { <dt>Hồ sơ gửi lúc</dt><dd>{{ time(p.evidenceSubmittedAt) }}</dd> }
+        </dl>
+
+        @if (ev(p.policyId); as e) {
+          <div class="evidence">
+            @if (e.loading) {
+              <p class="muted"><span class="spinner" aria-hidden="true"></span> Đang tải hồ sơ...</p>
+            } @else if (e.error) {
+              <div class="alert alert-error" role="alert">{{ e.error }}</div>
+            } @else if (e.review; as r) {
+              @if (!r.meta) {
+                <div class="alert alert-warning" role="status">Chưa có ảnh trên máy chủ cho policy này.</div>
+              } @else {
+                <div class="photos">
+                  @for (k of kinds; track k) {
+                    <figure>
+                      @if (r.images[k]; as src) {
+                        @if (!imageFailed(p.policyId, k)) {
+                          <img [src]="src" [alt]="'Ảnh ' + photoLabels[k]" loading="lazy" (error)="markImageFailed(p.policyId, k)" />
+                        } @else {
+                          <div class="photo-fallback">Không hiển thị được<a [href]="src" target="_blank" rel="noopener noreferrer">Mở ảnh</a></div>
+                        }
+                      } @else {
+                        <div class="photo-fallback">Không tải được ảnh</div>
+                      }
+                      <figcaption>{{ photoLabels[k] }}</figcaption>
+                    </figure>
+                  }
+                </div>
+                <p class="hint">Liên kết ảnh có hiệu lực 5 phút. Hết hạn thì bấm "Tải lại hồ sơ".</p>
+
+                <ul class="checks">
+                  <li [class.ok]="!!r.onChain && r.onChain.submittedAt > 0" [class.bad]="!r.onChain || r.onChain.submittedAt === 0">
+                    {{ r.onChain && r.onChain.submittedAt > 0 ? 'Đã gửi hash lên blockchain' : 'Chưa gửi hash lên blockchain' }}
+                  </li>
+                  <li [class.ok]="r.hashMatch" [class.bad]="!r.hashMatch">
+                    {{ r.hashMatch ? 'Hash on-chain khớp ảnh trên máy chủ' : 'Hash on-chain KHÔNG khớp ảnh trên máy chủ' }}
+                  </li>
+                  <li [class.ok]="!distanceWarning(r.meta)" [class.warn]="distanceWarning(r.meta)">{{ distanceText(r.meta) }}</li>
+                  <li>Độ chính xác GPS khai báo: ±{{ r.meta.gpsAccuracy.toFixed(0) }} m</li>
+                </ul>
+              }
+            }
+            <div class="evidence-actions">
+              <button type="button" class="btn btn-outline small" (click)="openEvidence(p.policyId)" [disabled]="e.loading">Tải lại hồ sơ</button>
+              <button type="button" class="btn btn-outline small" (click)="closeEvidence(p.policyId)">Đóng hồ sơ</button>
+            </div>
+          </div>
+        } @else {
+          <button type="button" class="btn btn-outline" (click)="openEvidence(p.policyId)">Xem hồ sơ</button>
+        }
+
+        <div class="decision">
+          <label [for]="'note-' + p.policyId">Ghi chú (bắt buộc khi từ chối, tối đa {{ noteMax }} ký tự)</label>
+          <textarea [id]="'note-' + p.policyId" rows="2" [attr.maxlength]="noteMax" [value]="noteOf(p.policyId)"
+            (input)="setNote(p.policyId, $any($event.target).value)" [attr.aria-invalid]="!!noteErrors()[p.policyId]"
+            [disabled]="processingId() === p.policyId"></textarea>
+          @if (noteErrors()[p.policyId]; as ne) { <p class="field-error">{{ ne }}</p> }
+          @if (cardErrors()[p.policyId]; as ce) { <div class="alert alert-error" role="alert">{{ ce }}</div> }
+
+          @if (confirming(); as c) {
+            @if (c.id === p.policyId) {
+              <div class="confirm" role="alertdialog" [attr.aria-label]="'Xác nhận ' + (c.approved ? 'duyệt' : 'từ chối')">
+                <p>
+                  Xác nhận <strong>{{ c.approved ? 'DUYỆT' : 'TỪ CHỐI' }}</strong> policy #{{ p.policyId }}?
+                  Quyết định được ghi lên blockchain và không hoàn tác được.
+                </p>
+                <div class="review-actions">
+                  <button type="button" class="btn" [class.btn-primary]="c.approved" [class.btn-danger]="!c.approved"
+                    (click)="confirm()" [disabled]="processingId() !== null">
+                    @if (processingId() === p.policyId) { <span class="spinner" aria-hidden="true"></span> Đang gửi giao dịch... } @else { Xác nhận }
+                  </button>
+                  <button type="button" class="btn btn-outline" (click)="cancelConfirm()" [disabled]="processingId() !== null">Huỷ</button>
+                </div>
+              </div>
+            }
+          }
+
+          @if (confirming()?.id !== p.policyId) {
+            <div class="review-actions">
+              <button type="button" class="btn btn-primary" [disabled]="!canApprove(p.policyId) || processingId() !== null"
+                [title]="approveHint(p.policyId)" (click)="ask(p.policyId, true)">Duyệt</button>
+              <button type="button" class="btn btn-outline btn-reject" [disabled]="processingId() !== null"
+                (click)="ask(p.policyId, false)">Từ chối</button>
+            </div>
+            @if (!canApprove(p.policyId)) { <p class="hint">{{ approveHint(p.policyId) }}</p> }
+          }
+        </div>
+      </div>
+    }
+  </div>
 </div>

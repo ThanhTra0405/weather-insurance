@@ -1,78 +1,65 @@
-import { Component, inject, signal, effect, untracked } from '@angular/core';
-import { CommonModule } from '@angular/common';
-import { Web3Service } from '../../services/web3.service';
-import { ContractService } from '../../services/contract.service';
-import { formatEther } from 'ethers';
+import { Component, OnInit, computed, inject, signal } from '@angular/core';
+import { RouterLink } from '@angular/router';
+import { PolicySummary } from '../../models/policy.models';
+import { PolicyService } from '../../services/policy.service';
+import { errorMessage } from '../../utils/api-helpers';
+import { formatEth, perilIcon, policyStatusView, remainingText } from '../../utils/format';
 
-interface PolicyView {
-  id: bigint;
-  status: number;
-  coverageAmount: bigint;
-  endTime: bigint;
-}
-
-const STATUS_LABELS = ['Chờ xác minh', 'Đang hiệu lực', 'Đã bồi thường', 'Đã đóng'];
-const STATUS_CLASSES = ['badge-pending', 'badge-active', 'badge-paid', 'badge-closed'];
-
+/** Tổng quan của nông dân (SPEC-B mục 9.3.3): thẻ tổng hợp + danh sách policy từ GET /api/policies/mine. */
 @Component({
   selector: 'app-dashboard',
   standalone: true,
-  imports: [CommonModule],
+  imports: [RouterLink],
   templateUrl: './dashboard.html',
   styleUrl: './dashboard.css',
 })
-export class Dashboard {
-  private web3 = inject(Web3Service);
-  private contractService = inject(ContractService);
+export class Dashboard implements OnInit {
+  private readonly policyService = inject(PolicyService);
 
-  readonly policies = signal<PolicyView[]>([]);
-  readonly isLoading = signal(false);
+  readonly policies = signal<PolicySummary[]>([]);
+  readonly isLoading = signal(true);
   readonly loadError = signal<string | null>(null);
 
-  constructor() {
-    // Tự tải khi ví sẵn sàng (hoặc đổi địa chỉ)
-    effect(() => {
-      if (this.web3.address()) untracked(() => this.loadPolicies());
-    });
+  readonly totalCount = computed(() => this.policies().length);
+  readonly activeCount = computed(() => this.policies().filter((p) => p.status === 1).length);
+  /** Tổng mức bồi thường của các policy đã bồi thường (mức bồi thường = số tiền chi trả của gói). */
+  readonly paidTotalWei = computed(() =>
+    this.policies()
+      .filter((p) => p.status === 2)
+      .reduce((sum, p) => sum + BigInt(p.coverageWei || '0'), 0n),
+  );
+
+  ngOnInit(): void {
+    void this.loadPolicies();
   }
 
   async loadPolicies(): Promise<void> {
-    const address = this.web3.address();
-    if (!address) return;
-
     this.isLoading.set(true);
     this.loadError.set(null);
-
     try {
-      const ids = await this.contractService.getActivePolicies(address);
-      const results = await Promise.all(
-        ids.map(async (id): Promise<PolicyView> => {
-          const p = await this.contractService.getPolicy(id);
-          return {
-            id,
-            status: Number(p.status),
-            coverageAmount: p.coverageAmount,
-            endTime: p.endTime,
-          };
-        })
-      );
-      this.policies.set(results);
-    } catch (err: any) {
-      this.loadError.set(err?.message ?? 'Không tải được danh sách policy');
+      this.policies.set(await this.policyService.mine());
+    } catch (e) {
+      this.loadError.set(errorMessage(e, 'Không tải được danh sách policy'));
     } finally {
       this.isLoading.set(false);
     }
   }
 
-  statusLabel(status: number): string {
-    return STATUS_LABELS[status] ?? 'Không rõ';
+  statusView(p: PolicySummary) {
+    return policyStatusView(p.status, p.rejected);
   }
 
-  statusClass(status: number): string {
-    return STATUS_CLASSES[status] ?? 'badge-closed';
+  remaining(p: PolicySummary): string {
+    return remainingText(p.status, p.startTime, p.endTime);
   }
 
-  formatEth(wei: bigint): string {
-    return formatEther(wei);
+  needsEvidence(p: PolicySummary): boolean {
+    return p.status === 0 && p.hasEvidence === false;
+  }
+
+  perilIcon = perilIcon;
+  formatEth = formatEth;
+  formatEthWei(wei: bigint): string {
+    return formatEth(wei);
   }
 }

@@ -1,0 +1,131 @@
+<div class="container detail-page">
+  <p class="back"><a routerLink="/dashboard">← Tổng quan</a></p>
+
+  @if (loading()) {
+    <div class="card"><p class="muted"><span class="spinner" aria-hidden="true"></span> Đang tải policy...</p></div>
+  } @else if (notFound()) {
+    <div class="card">
+      <h1>Không tìm thấy policy</h1>
+      <p class="muted-text">Policy không tồn tại hoặc không thuộc tài khoản của bạn.</p>
+      <a routerLink="/dashboard" class="btn btn-primary">Về tổng quan</a>
+    </div>
+  } @else if (error(); as err) {
+    <div class="card">
+      <div class="alert alert-error" role="alert">{{ err }}</div>
+      <button type="button" class="btn btn-outline" (click)="load(policyId()!)">Thử lại</button>
+    </div>
+  } @else if (policy(); as p) {
+    <div class="title-row">
+      <h1>Policy #{{ p.policyId }}</h1>
+      @if (statusView(); as sv) { <span class="badge" [class]="'badge ' + sv.cls">{{ sv.label }}</span> }
+    </div>
+
+    @if (p.source === 'chain') {
+      <div class="alert alert-info" role="status">
+        Máy chủ chưa có dữ liệu lịch sử của policy này nên chỉ hiển thị thông tin đọc từ blockchain (chưa có timeline và lý do từ chối).
+      </div>
+    }
+
+    @if (isRejected()) {
+      <div class="alert alert-error reject-box" role="alert">
+        <strong>Hồ sơ bị từ chối.</strong>
+        @if (p.rejectReason; as reason) { Lý do: {{ reason }} } @else { Chưa có lý do chi tiết. }
+        Phí bảo hiểm đã được hoàn lại.
+        <a [routerLink]="['/tickets/new']" [queryParams]="{ policyId: p.policyId }">Tạo yêu cầu hỗ trợ</a>
+      </div>
+    }
+
+    <section class="card">
+      <h2>Thông tin</h2>
+      <dl class="info">
+        <dt>Gói bảo hiểm</dt>
+        <dd><span aria-hidden="true">{{ perilIcon(p.perilType) }}</span> {{ p.productName ?? 'Gói #' + p.productId }} ({{ perilLabel(p.perilType) }})</dd>
+        <dt>Mức bồi thường</dt>
+        <dd>{{ formatEth(p.coverageWei) }} ETH</dd>
+        <dt>Phí đã đóng</dt>
+        <dd>{{ formatEth(p.premiumWei) }} ETH</dd>
+        <dt>Hiệu lực</dt>
+        <dd>{{ formatTime(p.startTime) }} → {{ formatTime(p.endTime) }}</dd>
+        <dt>Tình trạng</dt>
+        <dd>{{ remaining(p) }}</dd>
+        <dt>Vị trí</dt>
+        <dd>
+          {{ (p.latE6 / 1000000).toFixed(6) }}, {{ (p.lngE6 / 1000000).toFixed(6) }}
+          · <a [href]="mapUrl(p.latE6, p.lngE6)" target="_blank" rel="noopener noreferrer">Xem trên bản đồ</a>
+        </dd>
+      </dl>
+      <div class="actions">
+        @if (canSendEvidence()) {
+          <a routerLink="/buy-policy" [queryParams]="{ resume: p.policyId }" class="btn btn-primary">Gửi hồ sơ xác minh</a>
+        }
+        <a routerLink="/tickets/new" [queryParams]="{ policyId: p.policyId }" class="btn btn-outline">Tạo yêu cầu hỗ trợ</a>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Tiến trình</h2>
+      <ol class="timeline">
+        @for (s of steps(); track s.key) {
+          <li [attr.data-state]="s.state">
+            <span class="marker" aria-hidden="true">{{ s.state === 'done' ? '✓' : s.state === 'rejected' ? '✕' : '' }}</span>
+            <div class="body">
+              <div class="step-title">{{ s.title }}</div>
+              @if (s.time) { <div class="step-time">{{ formatTime(s.time) }}</div> }
+              @if (s.note; as note) { <div class="step-note">{{ note }}</div> }
+              @if (s.key === 'payout' && s.state === 'done') {
+                @if (payoutAmount(p); as amount) {
+                  <div class="step-note">Số tiền: {{ amount }} ETH</div>
+                }
+              }
+              @if (s.txHash; as tx) {
+                @if (txUrl(tx); as url) {
+                  <a class="step-tx" [href]="url" target="_blank" rel="noopener noreferrer">Xem giao dịch</a>
+                } @else {
+                  <span class="step-tx mono">{{ tx.slice(0, 12) }}…</span>
+                }
+              }
+            </div>
+          </li>
+        }
+      </ol>
+    </section>
+
+    <section class="card">
+      <div class="section-head">
+        <h2>Hồ sơ đã gửi</h2>
+        @if (meta()) {
+          <button type="button" class="btn btn-outline small" (click)="loadPhotos(p.policyId)" [disabled]="photosLoading()">Tải lại ảnh</button>
+        }
+      </div>
+      @if (photosLoading() && photos().length === 0) {
+        <p class="muted"><span class="spinner" aria-hidden="true"></span> Đang tải ảnh...</p>
+      } @else if (photosError(); as pe) {
+        <div class="alert alert-error" role="alert">{{ pe }}</div>
+      } @else if (!meta()) {
+        <p class="muted-text">Chưa có hồ sơ ảnh cho policy này.</p>
+      } @else {
+        @if (meta(); as m) {
+          <p class="muted-text">
+            Gửi lúc {{ formatTime(m.uploadedAt) }}@if (m.locked) { · đã khoá (hash nằm trên blockchain) }
+          </p>
+        }
+        <div class="photos">
+          @for (ph of photos(); track ph.kind) {
+            <figure>
+              @if (ph.url && !ph.failed) {
+                <img [src]="ph.url" [alt]="'Ảnh ' + ph.label" loading="lazy" (error)="markPhotoFailed(ph.kind)" />
+              } @else {
+                <div class="photo-fallback">
+                  Không hiển thị được ảnh
+                  @if (ph.url) { <a [href]="ph.url" target="_blank" rel="noopener noreferrer">Mở ảnh</a> }
+                </div>
+              }
+              <figcaption>{{ ph.label }}</figcaption>
+            </figure>
+          }
+        </div>
+        <p class="hint">Liên kết ảnh có hiệu lực 5 phút. Hết hạn thì bấm "Tải lại ảnh".</p>
+      }
+    </section>
+  }
+</div>

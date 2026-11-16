@@ -1,3 +1,4 @@
+
 using backend.Data;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -9,50 +10,101 @@ namespace backend.Controllers
     public class HistoryController : ControllerBase
     {
         private readonly AppDbContext _db;
-        public HistoryController(AppDbContext db) => _db = db;
 
+        public HistoryController(AppDbContext db)
+        {
+            _db = db;
+        }
+
+        // Lịch sử hợp đồng
         [HttpGet("policies")]
         public async Task<IActionResult> GetPolicies(
-            [FromQuery] string? holder, [FromQuery] byte? status, CancellationToken ct)
+            [FromQuery] string? holder,
+            [FromQuery] byte? status,
+            CancellationToken ct)
         {
-            var q = _db.Policies.AsNoTracking().AsQueryable();
-            if (!string.IsNullOrEmpty(holder))
+            var q = _db.PoliciesCache
+                .AsNoTracking()
+                .AsQueryable();
+
+            if (!string.IsNullOrWhiteSpace(holder))
             {
                 var h = holder.ToLowerInvariant();
                 q = q.Where(p => p.Holder.ToLower() == h);
             }
-            if (status.HasValue) q = q.Where(p => p.Status == status.Value);
 
-            return Ok(await q.OrderByDescending(p => p.PolicyId).Take(200).ToListAsync(ct));
+            if (status.HasValue)
+            {
+                q = q.Where(p => p.Status == (short)status.Value);
+            }
+
+            var result = await q
+                .OrderByDescending(p => p.PolicyId)
+                .Take(200)
+                .ToListAsync(ct);
+
+            return Ok(result);
         }
 
+        // Chi tiết hợp đồng
         [HttpGet("policies/{id:long}")]
-        public async Task<IActionResult> GetPolicy(long id, CancellationToken ct)
+        public async Task<IActionResult> GetPolicy(
+            long id,
+            CancellationToken ct)
         {
-            var p = await _db.Policies.AsNoTracking().FirstOrDefaultAsync(x => x.PolicyId == id, ct);
-            return p is null ? NotFound() : Ok(p);
+            var policy = await _db.PoliciesCache
+                .AsNoTracking()
+                .FirstOrDefaultAsync(p => p.PolicyId == id, ct);
+
+            return policy is null ? NotFound() : Ok(policy);
         }
 
+        // Lịch sử payout của một hợp đồng
         [HttpGet("policies/{id:long}/payouts")]
-        public async Task<IActionResult> GetPayouts(long id, CancellationToken ct) =>
-            Ok(await _db.Payouts.AsNoTracking()
-                .Where(x => x.PolicyId == id)
-                .OrderByDescending(x => x.CreatedAt)
-                .ToListAsync(ct));
+        public async Task<IActionResult> GetPayouts(
+            long id,
+            CancellationToken ct)
+        {
+            var payouts = await _db.ChainEvents
+                .AsNoTracking()
+                .Where(e =>
+                    e.PolicyId == id &&
+                    e.EventName == "PayoutTriggered")
+                .OrderByDescending(e => e.BlockTime)
+                .ToListAsync(ct);
 
+            return Ok(payouts);
+        }
+
+        // Lịch sử Oracle theo khu vực
         [HttpGet("oracle/{regionId}")]
-        public async Task<IActionResult> GetOracleHistory(string regionId, CancellationToken ct) =>
-            Ok(await _db.OracleSubmissions.AsNoTracking()
+        public async Task<IActionResult> GetOracleHistory(
+            string regionId,
+            CancellationToken ct)
+        {
+            var history = await _db.OracleLogs
+                .AsNoTracking()
                 .Where(x => x.RegionId == regionId)
                 .OrderByDescending(x => x.CreatedAt)
                 .Take(100)
-                .ToListAsync(ct));
+                .ToListAsync(ct);
 
+            return Ok(history);
+        }
+
+        // Các giao dịch payout gần đây
         [HttpGet("payouts")]
-        public async Task<IActionResult> GetRecentPayouts(CancellationToken ct) =>
-            Ok(await _db.Payouts.AsNoTracking()
-                .OrderByDescending(x => x.CreatedAt)
+        public async Task<IActionResult> GetRecentPayouts(
+            CancellationToken ct)
+        {
+            var payouts = await _db.ChainEvents
+                .AsNoTracking()
+                .Where(e => e.EventName == "PayoutTriggered")
+                .OrderByDescending(e => e.BlockTime)
                 .Take(100)
-                .ToListAsync(ct));
+                .ToListAsync(ct);
+
+            return Ok(payouts);
+        }
     }
 }

@@ -1,60 +1,212 @@
 <div class="container buy-page">
   <h1>Mua bảo hiểm</h1>
 
-  <section class="card">
-    <h2>1. Chọn gói</h2>
-    <label>
-      Mã sản phẩm
-      <input type="number" min="1" [ngModel]="productId()" (ngModelChange)="onProductChange($event)" />
-    </label>
-    @if (product(); as p) {
-      <p><strong>{{ p.name }}</strong></p>
-      <p>Phí bảo hiểm: {{ p.premiumEth }} ETH · Bồi thường: {{ p.coverageEth }} ETH · Thời hạn: {{ p.durationDays }} ngày</p>
+  @if (done(); as d) {
+    <section class="card done-card" aria-live="polite">
+      <div class="done-icon" aria-hidden="true">✅</div>
+      <h2>{{ d.alreadySubmitted ? 'Hồ sơ đã có trên blockchain' : 'Đã gửi hồ sơ xác minh' }}</h2>
+      <p>
+        Policy <strong>#{{ d.policyId }}</strong> đang chờ quản trị viên xác minh. Bạn sẽ nhận thông báo khi có kết quả.
+      </p>
+      <ul class="tx-list">
+        @if (d.buyTx; as tx) {
+          <li>
+            Giao dịch mua:
+            @if (txUrl(tx); as url) { <a [href]="url" target="_blank" rel="noopener noreferrer">xem trên explorer</a> }
+            @else { <span class="mono">{{ tx }}</span> }
+          </li>
+        }
+        @if (d.evidenceTx; as tx) {
+          <li>
+            Giao dịch ghi hash hồ sơ:
+            @if (txUrl(tx); as url) { <a [href]="url" target="_blank" rel="noopener noreferrer">xem trên explorer</a> }
+            @else { <span class="mono">{{ tx }}</span> }
+          </li>
+        }
+      </ul>
+      <div class="done-actions">
+        <a class="btn btn-primary" [routerLink]="['/policies', d.policyId]">Xem chi tiết policy</a>
+        <a class="btn btn-outline" routerLink="/dashboard">Về tổng quan</a>
+      </div>
+    </section>
+  } @else if (resumeError(); as re) {
+    <section class="card">
+      <div class="alert alert-error" role="alert">{{ re }}</div>
+      <div class="done-actions">
+        <a class="btn btn-primary" routerLink="/dashboard">Về tổng quan</a>
+        <a class="btn btn-outline" routerLink="/buy-policy">Mua bảo hiểm mới</a>
+      </div>
+    </section>
+  } @else if (resumeLoading()) {
+    <section class="card"><p class="muted"><span class="spinner" aria-hidden="true"></span> Đang kiểm tra policy...</p></section>
+  } @else {
+    @if (pendingBanner(); as pid) {
+      @if (resumeId() === null) {
+        <div class="alert alert-warning" role="status">
+          Bạn có policy <strong>#{{ pid }}</strong> đã mua nhưng chưa gửi xong hồ sơ.
+          <button type="button" class="link-btn" (click)="openResume(pid)">Tiếp tục gửi hồ sơ</button>
+        </div>
+      }
     }
-    @if (productError(); as e) {
-      <p class="error">{{ e }}</p>
+
+    @if (resumeId() !== null) {
+      <div class="alert alert-info" role="status">
+        Đang gửi hồ sơ cho policy <strong>#{{ resumeId() }}</strong>@if (resumeProductName(); as n) { ({{ n }}) }.
+        Vị trí lấy theo policy đã mua; bạn chỉ cần chụp 3 ảnh.
+      </div>
     }
-  </section>
 
-  <section class="card">
-    <h2>2. Vị trí ruộng</h2>
-    <p class="hint">Hãy đứng tại ruộng rồi bấm lấy vị trí.</p>
-    <button class="btn btn-primary" (click)="getGps()" [disabled]="isLoadingGps()">
-      {{ isLoadingGps() ? 'Đang lấy vị trí...' : 'Lấy vị trí GPS' }}
-    </button>
-    @if (lat() !== null && lng() !== null) {
-      <p>{{ lat()!.toFixed(6) }}, {{ lng()!.toFixed(6) }} (±{{ gpsAccuracy()!.toFixed(0) }} m)</p>
+    <ol class="stepper" aria-label="Các bước">
+      @for (name of stepNames; track name; let i = $index) {
+        <li [class.current]="step() === i + 1" [class.passed]="step() > i + 1">
+          <span class="dot">{{ step() > i + 1 ? '✓' : i + 1 }}</span>
+          <span class="label">{{ name }}</span>
+        </li>
+      }
+    </ol>
+
+    <!-- Bước 1 -->
+    @if (step() === 1) {
+      <section class="card">
+        <h2>1. Chọn gói bảo hiểm</h2>
+        @if (productsLoading()) {
+          <p class="muted"><span class="spinner" aria-hidden="true"></span> Đang tải danh sách gói...</p>
+        } @else if (productsError(); as pe) {
+          <div class="alert alert-error" role="alert">{{ pe }}</div>
+          <button type="button" class="btn btn-outline" (click)="loadProducts()">Thử lại</button>
+        } @else if (productList().length === 0) {
+          <p class="muted">Hiện chưa có gói bảo hiểm nào đang mở bán.</p>
+          <button type="button" class="btn btn-outline" (click)="loadProducts()">Tải lại</button>
+        } @else {
+          <div class="products" role="group" aria-label="Danh sách gói">
+            @for (p of productList(); track p.productId) {
+              <button
+                type="button"
+                class="product"
+                [class.selected]="selectedId() === p.productId"
+                [attr.aria-pressed]="selectedId() === p.productId"
+                (click)="selectProduct(p)"
+              >
+                <span class="product-head">
+                  <span class="peril" aria-hidden="true">{{ perilIcon(p.perilType) }}</span>
+                  <span class="product-name">{{ p.name }}</span>
+                </span>
+                <span class="product-peril">{{ perilLabel(p.perilType) }} · kích hoạt khi {{ thresholdOf(p) }}</span>
+                <span class="product-nums">
+                  <span><small>Phí</small> <strong>{{ formatEth(p.premiumWei) }} ETH</strong></span>
+                  <span><small>Bồi thường</small> <strong>{{ formatEth(p.coverageWei) }} ETH</strong></span>
+                  <span><small>Thời hạn</small> <strong>{{ p.durationDays }} ngày</strong></span>
+                </span>
+              </button>
+            }
+          </div>
+        }
+      </section>
     }
-    @if (gpsError(); as e) {
-      <p class="error">{{ e }}</p>
+
+    <!-- Bước 2 -->
+    @if (step() === 2) {
+      <section class="card">
+        <h2>2. Vị trí ruộng</h2>
+        <p class="hint">Hãy đứng tại ruộng rồi bấm lấy vị trí. Sai số GPS phải không quá {{ maxAccuracy }} m.</p>
+        <button type="button" class="btn btn-primary" (click)="getGps()" [disabled]="gpsLoading()">
+          @if (gpsLoading()) { <span class="spinner" aria-hidden="true"></span> Đang lấy vị trí... }
+          @else { {{ lat() === null ? 'Lấy vị trí GPS' : 'Lấy lại vị trí' }} }
+        </button>
+        @if (lat() !== null && lng() !== null && accuracy() !== null) {
+          <p class="coords">
+            📍 {{ lat()!.toFixed(6) }}, {{ lng()!.toFixed(6) }}
+            <span [class.bad]="accuracy()! > maxAccuracy">(±{{ accuracy()!.toFixed(0) }} m)</span>
+          </p>
+        }
+        @if (gpsError(); as e) { <div class="alert alert-error" role="alert">{{ e }}</div> }
+      </section>
     }
-  </section>
 
-  <section class="card">
-    <h2>3. Ảnh xác minh</h2>
-    <p class="hint">Chụp trực tiếp bằng camera, không chọn ảnh có sẵn.</p>
-    <label>
-      Ảnh chân dung
-      <input type="file" accept="image/*" capture="user" (change)="onPhoto('selfie', $event)" />
-    </label>
-    <label>
-      Ảnh ruộng
-      <input type="file" accept="image/*" capture="environment" (change)="onPhoto('field', $event)" />
-    </label>
-    <label>
-      Ảnh giấy tờ đất
-      <input type="file" accept="image/*" capture="environment" (change)="onPhoto('document', $event)" />
-    </label>
-  </section>
+    <!-- Bước 3 -->
+    @if (step() === 3) {
+      <section class="card">
+        <h2>3. Ảnh xác minh</h2>
+        <p class="hint">Chụp trực tiếp bằng camera. Mỗi ảnh tối đa 10 MB (JPEG, PNG, WEBP, HEIC).</p>
+        <div class="photos">
+          @for (k of kinds; track k) {
+            <div class="photo">
+              <label [attr.for]="'photo-' + k">Ảnh {{ photoLabels[k] }}</label>
+              <input
+                [id]="'photo-' + k"
+                type="file"
+                accept="image/*"
+                [attr.capture]="k === 'selfie' ? 'user' : 'environment'"
+                (change)="onPhoto(k, $event)"
+              />
+              @if (photoErrors()[k]; as pe) { <p class="field-error">{{ pe }}</p> }
+              @if (previews()[k]; as src) {
+                <img class="preview" [src]="src" [alt]="'Xem trước ảnh ' + photoLabels[k]" />
+              } @else if (photos()[k]) {
+                <p class="hint">Đã chọn: {{ photos()[k]!.name }}</p>
+              }
+            </div>
+          }
+        </div>
+      </section>
+    }
 
-  <button class="btn btn-primary" (click)="submit()" [disabled]="isSubmitting() || !product()">
-    {{ isSubmitting() ? step() : 'Mua bảo hiểm' }}
-  </button>
+    <!-- Bước 4 -->
+    @if (step() === 4) {
+      <section class="card">
+        <h2>4. Thanh toán &amp; gửi hồ sơ</h2>
+        <dl class="summary">
+          @if (resumeId() !== null) {
+            <dt>Policy</dt>
+            <dd>#{{ resumeId() }} @if (resumeProductName(); as n) { · {{ n }} }</dd>
+          } @else if (selected(); as p) {
+            <dt>Gói</dt>
+            <dd>{{ p.name }} ({{ perilLabel(p.perilType) }})</dd>
+            <dt>Phí bảo hiểm</dt>
+            <dd>{{ formatEth(p.premiumWei) }} ETH</dd>
+            <dt>Mức bồi thường</dt>
+            <dd>{{ formatEth(p.coverageWei) }} ETH</dd>
+            <dt>Thời hạn</dt>
+            <dd>{{ p.durationDays }} ngày</dd>
+          }
+          <dt>Vị trí</dt>
+          <dd>{{ lat()?.toFixed(6) }}, {{ lng()?.toFixed(6) }}</dd>
+          <dt>Số dư ví</dt>
+          <dd>{{ balance() ?? '—' }} ETH</dd>
+        </dl>
+        <div class="thumbs">
+          @for (k of kinds; track k) {
+            @if (previews()[k]; as src) {
+              <img [src]="src" [alt]="'Ảnh ' + photoLabels[k]" />
+            }
+          }
+        </div>
 
-  @if (submitError(); as e) {
-    <p class="error">{{ e }}</p>
-  }
-  @if (submitSuccess()) {
-    <p class="success">Đã gửi hồ sơ. Policy sẽ có hiệu lực sau khi được xác minh.</p>
+        <ol class="stages" aria-live="polite">
+          <li [attr.data-state]="stages().buy">{{ resumeId() !== null ? 'Policy đã mua' : 'Mua bảo hiểm' }}</li>
+          <li [attr.data-state]="stages().upload">Tải ảnh &amp; đối chiếu hash</li>
+          <li [attr.data-state]="stages().chain">Ghi bằng chứng lên blockchain</li>
+        </ol>
+
+        @if (submitError(); as e) { <div class="alert alert-error" role="alert">{{ e }}</div> }
+
+        <button type="button" class="btn btn-primary btn-block" (click)="submit()" [disabled]="phase() !== 'idle'">
+          @if (phase() === 'running') { <span class="spinner" aria-hidden="true"></span> Đang xử lý, vui lòng đợi... }
+          @else if (resumeId() !== null || isRetry) { Thử gửi hồ sơ }
+          @else { Thanh toán &amp; gửi hồ sơ }
+        </button>
+      </section>
+    }
+
+    @if (stepError(); as se) { <div class="alert alert-error" role="alert">{{ se }}</div> }
+
+    <div class="nav-row">
+      <button type="button" class="btn btn-outline" (click)="back()" [disabled]="!canGoBack()" [class.invisible]="step() === (resumeId() !== null ? 3 : 1)">
+        ← Quay lại
+      </button>
+      @if (step() < 4) {
+        <button type="button" class="btn btn-primary" (click)="next()">Tiếp tục →</button>
+      }
+    </div>
   }
 </div>

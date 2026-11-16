@@ -1,33 +1,68 @@
 <div class="container dashboard-page">
   <div class="dashboard-header">
-    <h1>Policy của tôi</h1>
-    <button class="btn btn-outline" (click)="loadPolicies()" [disabled]="isLoading()">
-      {{ isLoading() ? 'Đang tải...' : '↻ Tải lại' }}
-    </button>
+    <h1>Tổng quan</h1>
+    <div class="header-actions">
+      <button type="button" class="btn btn-outline" (click)="loadPolicies()" [disabled]="isLoading()">
+        @if (isLoading()) { <span class="spinner" aria-hidden="true"></span> Đang tải... } @else { ↻ Tải lại }
+      </button>
+      <a routerLink="/buy-policy" class="btn btn-primary">+ Mua bảo hiểm</a>
+    </div>
   </div>
 
   @if (loadError(); as err) {
-  <p class="error-text">{{ err }}</p>
+    <div class="alert alert-error" role="alert">
+      {{ err }}
+      <button type="button" class="link-btn" (click)="loadPolicies()">Thử lại</button>
+    </div>
   }
 
-  @if (policies().length === 0 && !isLoading()) {
-  <div class="card empty-state">
-    <p>Bạn chưa có policy nào.</p>
-    <a routerLink="/buy-policy" class="btn btn-primary">Mua bảo hiểm ngay</a>
+  <div class="stats">
+    <div class="card stat">
+      <span class="stat-label">Tổng số policy</span>
+      <span class="stat-value">{{ totalCount() }}</span>
+    </div>
+    <div class="card stat">
+      <span class="stat-label">Đang hiệu lực</span>
+      <span class="stat-value">{{ activeCount() }}</span>
+    </div>
+    <div class="card stat">
+      <span class="stat-label">Đã nhận bồi thường</span>
+      <span class="stat-value">{{ formatEthWei(paidTotalWei()) }} <small>ETH</small></span>
+    </div>
   </div>
+
+  @if (isLoading() && policies().length === 0) {
+    <div class="card"><p class="muted"><span class="spinner" aria-hidden="true"></span> Đang tải danh sách policy...</p></div>
+  } @else if (policies().length === 0 && !loadError()) {
+    <div class="card empty-state">
+      <p>Bạn chưa có policy nào.</p>
+      <a routerLink="/buy-policy" class="btn btn-primary">Mua bảo hiểm ngay</a>
+    </div>
   }
 
   <div class="policy-list">
-    @for (policy of policies(); track policy.id) {
-    <div class="card policy-card">
-      <div class="policy-card-top">
-        <span class="policy-id">Policy #{{ policy.id }}</span>
-        <span class="badge" [class]="statusClass(policy.status)">{{ statusLabel(policy.status) }}</span>
+    @for (p of policies(); track p.policyId) {
+      <div class="card policy-card">
+        <div class="policy-card-top">
+          <span class="policy-id">Policy #{{ p.policyId }}</span>
+          <span class="badge" [class]="'badge ' + statusView(p).cls">{{ statusView(p).label }}</span>
+        </div>
+        <p class="policy-name">
+          <span aria-hidden="true">{{ perilIcon(p.perilType) }}</span>
+          {{ p.productName ?? 'Gói bảo hiểm #' + p.productId }}
+        </p>
+        <p class="policy-line">Bồi thường: <strong>{{ formatEth(p.coverageWei) }} ETH</strong></p>
+        <p class="policy-line">{{ remaining(p) }}</p>
+        <div class="policy-actions">
+          <a [routerLink]="['/policies', p.policyId]" class="btn btn-outline small">Xem chi tiết</a>
+          @if (needsEvidence(p)) {
+            <a routerLink="/buy-policy" [queryParams]="{ resume: p.policyId }" class="btn btn-primary small">Gửi hồ sơ</a>
+          }
+        </div>
+        @if (needsEvidence(p)) {
+          <p class="policy-note">Bạn chưa gửi hồ sơ xác minh cho policy này.</p>
+        }
       </div>
-      <p class="policy-coverage">
-        Bồi thường: {{ formatEth(policy.coverageAmount) }} ETH
-      </p>
-    </div>
     }
   </div>
 </div>
