@@ -24,7 +24,7 @@ public class AdminPendingController : ControllerBase
 
         var ids = rows.Select(r => r.PolicyId).ToList();
         var productIds = rows.Select(r => r.ProductId).Distinct().ToList();
-        var wallets = rows.Select(r => r.Holder).Distinct().ToList();
+        var wallets = rows.Select(r => r.Holder.ToLowerInvariant()).Distinct().ToList();
 
         var names = await _db.ProductsCache.AsNoTracking()
             .Where(p => productIds.Contains(p.ProductId))
@@ -37,9 +37,13 @@ public class AdminPendingController : ControllerBase
             .GroupBy(e => e.PolicyId)
             .ToDictionary(g => g.Key, g => g.Min(x => x.BlockTime).ToUnixTimeSeconds());
 
-        var farmers = await _db.FarmerProfiles.AsNoTracking()
-            .Where(f => wallets.Contains(f.WalletAddress))
-            .ToDictionaryAsync(f => f.WalletAddress, f => new { f.FullName, f.Phone }, ct);
+        // So sanh khong phan biet hoa/thuong (holder trong cache va wallet_address co the khac dang chu)
+        var farmers = (await _db.FarmerProfiles.AsNoTracking()
+            .Where(f => wallets.Contains(f.WalletAddress.ToLower()))
+            .Select(f => new { Wallet = f.WalletAddress.ToLower(), f.FullName, f.Phone })
+            .ToListAsync(ct))
+            .GroupBy(f => f.Wallet)
+            .ToDictionary(g => g.Key, g => g.First());
 
         // Ho so da co bang chung len truoc, trong moi nhom thi policy cu hon len truoc
         var result = rows
@@ -47,11 +51,12 @@ public class AdminPendingController : ControllerBase
             .ThenBy(r => r.PolicyId)
             .Select(r =>
             {
-                farmers.TryGetValue(r.Holder, out var f);
+                var holder = r.Holder.ToLowerInvariant();
+                farmers.TryGetValue(holder, out var f);
                 return new
                 {
                     policyId = r.PolicyId,
-                    holder = r.Holder,
+                    holder,
                     lat = r.LatE6 / 1_000_000m,
                     lng = r.LngE6 / 1_000_000m,
                     coverageAmountWei = r.CoverageWei.ToString(),

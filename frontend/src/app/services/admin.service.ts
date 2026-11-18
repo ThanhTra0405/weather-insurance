@@ -105,9 +105,9 @@ function toPending(raw: any): PendingPolicy {
   return {
     policyId: toNumber(raw.policyId),
     holder: String(raw.holder ?? '').toLowerCase(),
-    latE6: toNumber(raw.latE6 ?? raw.lat),
-    lngE6: toNumber(raw.lngE6 ?? raw.lng),
-    coverageWei: String(raw.coverageAmountWei ?? raw.coverageWei ?? '0'),
+    latE6: Math.round(Number(raw.lat) * 1_000_000),
+    lngE6: Math.round(Number(raw.lng) * 1_000_000),
+    coverageWei: raw.coverageAmountWei,
     productName: raw.productName ?? null,
     perilType: raw.perilType === undefined || raw.perilType === null ? null : toNumber(raw.perilType),
     hasEvidence: typeof raw.hasEvidence === 'boolean' ? raw.hasEvidence : null,

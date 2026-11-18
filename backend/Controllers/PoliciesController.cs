@@ -27,8 +27,9 @@ public class PoliciesController : ControllerBase
         var wallet = User.GetWallet()?.ToLowerInvariant();
         if (string.IsNullOrEmpty(wallet)) return ApiResults.Forbidden();
 
+        // So sanh khong phan biet hoa/thuong (DB co the luu dang checksum)
         var rows = await _db.PoliciesCache.AsNoTracking()
-            .Where(p => p.Holder == wallet)
+            .Where(p => p.Holder.ToLower() == wallet)
             .OrderByDescending(p => p.PolicyId)
             .ToListAsync(ct);
 
@@ -66,8 +67,9 @@ public class PoliciesController : ControllerBase
         var role = User.GetRole();
         if (role == "farmer")
         {
-            var wallet = User.GetWallet()?.ToLowerInvariant();
-            if (string.IsNullOrEmpty(wallet) || wallet != p.Holder)
+            var wallet = User.GetWallet();
+            if (string.IsNullOrEmpty(wallet) ||
+                !string.Equals(wallet, p.Holder, StringComparison.OrdinalIgnoreCase))
                 return ApiResults.Forbidden("Bạn không có quyền xem policy này");
         }
         else if (role != "admin" && role != "support")
@@ -107,7 +109,7 @@ public class PoliciesController : ControllerBase
         ["productId"] = p.ProductId,
         ["productName"] = productName,
         ["perilType"] = (int)p.PerilType,
-        ["holder"] = p.Holder,
+        ["holder"] = p.Holder.ToLowerInvariant(),
         ["latE6"] = p.LatE6,
         ["lngE6"] = p.LngE6,
         ["regionId"] = p.RegionId,

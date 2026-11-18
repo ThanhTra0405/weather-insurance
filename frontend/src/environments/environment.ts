@@ -1,13 +1,13 @@
 // LOCAL (Hardhat node). Địa chỉ giữ nguyên theo lần deploy local của bạn.
 export const environment = {
   production: false,
-  rpcUrl: 'achemy url',
+  rpcUrl: 'https://eth-sepolia.g.alchemy.com/v2/alch_EhZvvflJaYTuu5I9wRy48',
   chainId: 11155111,
   devFaucet: false, // chỉ true khi chạy Hardhat local
   faucetUrl: '',
-  policyManagerAddress: '0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0',
-  payoutEngineAddress: '0xDc64a140Aa3E981100a9becA4E685f962f0cF6C9',
-  liquidityPoolAddress: '0x5FbDB2315678afecb367f032d93F642f64180aa3',
+  policyManagerAddress: '0x70F307D9442721DD1A439A5739868bc71cE58701',
+  payoutEngineAddress: '0xA91648989A79771D34C80f7529C19cbeDe7bb116',
+  liquidityPoolAddress: '0xDFA4341eB544Bc7584a43DafeB27e24cfD6559e1',
   backendUrl: 'http://localhost:5083',
   explorerTxBase: 'https://sepolia.etherscan.io/tx/'
 };

@@ -69,7 +69,7 @@ namespace backend.Controllers
             if (!policy.Exists) return ApiResults.NotFound("Không tìm thấy policy");
 
             // 2. Chỉ chủ policy
-            if (policy.Holder != wallet)
+            if (!string.Equals(policy.Holder, wallet, StringComparison.OrdinalIgnoreCase))
                 return ApiResults.Forbidden("Bạn không phải chủ của policy này");
 
             // 3. Phải đang chờ xác minh
@@ -283,7 +283,7 @@ namespace backend.Controllers
             if (meta == null)
                 return (null, ApiResults.NotFound("Chưa có hồ sơ bằng chứng cho policy này"));
 
-            if (role == "farmer" && meta.Holder != User.GetWallet())
+            if (role == "farmer" && !string.Equals(meta.Holder, User.GetWallet(), StringComparison.OrdinalIgnoreCase))
                 return (null, ApiResults.Forbidden());
 
             return (meta, null);
