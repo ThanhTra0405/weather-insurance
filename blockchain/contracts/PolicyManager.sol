@@ -4,6 +4,7 @@ pragma solidity ^0.8.24;
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/Pausable.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import "./libraries/DayTime.sol";
 
 interface ILiquidityPool {
     function availableLiquidity() external view returns (uint256);
@@ -74,12 +75,21 @@ contract PolicyManager is Ownable, Pausable, ReentrancyGuard {
 
     uint256 public coolingOffPeriod;
 
+    // Claim deadline: han CUOI de xu ly du lieu/chi tra cho su kien nam trong [startTime, endTime].
+    // KHONG mo rong thoi gian phat sinh rui ro; chi cho phep ngay du lieu cuoi (gui sau endTime) duoc xu ly.
+    uint256 public constant MIN_CLAIM_GRACE = 1 days;
+    uint256 public constant MAX_CLAIM_GRACE = 30 days;
+    uint256 public claimGracePeriod = 3 days;
+    mapping(uint256 => uint256) public claimDeadlineOf;
+
     mapping(uint256 => PolicyProduct) public products;
     mapping(uint256 => Policy) public policies;
     mapping(address => uint256[]) public policiesOf;
     mapping(uint256 => Evidence) public evidenceOf;
 
     event CoolingOffPeriodSet(uint256 seconds_);
+    event ClaimGracePeriodSet(uint256 seconds_);
+    event ClaimDeadlineSet(uint256 indexed policyId, uint256 claimDeadline);
     event PolicyProductCreated(
         uint256 indexed productId,
         string name,
@@ -284,13 +294,18 @@ contract PolicyManager is Ownable, Pausable, ReentrancyGuard {
                 "Chua co bang chung"
             );
             // Cooling-off: hiệu lực sau coolingOffPeriod kể từ lúc duyệt,
-            // thời hạn bảo hiểm tính lại từ mốc đó
+            // thời hạn bảo hiểm tính lại từ mốc đó.
+            // Hạn hán: làm tròn startTime LÊN 00:00 (UTC+7) để bảo hiểm gồm đúng durationDays NGÀY LỊCH
+            // đầy đủ (30 ngày bảo hiểm = đủ 30 bản ghi ngày của oracle). Lũ/gió giữ nguyên.
             pol.status = PolicyStatus.Active;
-            pol.startTime = block.timestamp + coolingOffPeriod;
-            pol.endTime =
-                pol.startTime +
-                products[pol.productId].durationDays *
-                1 days;
+            uint256 start = block.timestamp + coolingOffPeriod;
+            if (products[pol.productId].perilType == 0) {
+                start = DayTime.ceilToDayStart(start);
+            }
+            pol.startTime = start;
+            pol.endTime = start + products[pol.productId].durationDays * 1 days;
+            claimDeadlineOf[policyId] = pol.endTime + claimGracePeriod;
+            emit ClaimDeadlineSet(policyId, claimDeadlineOf[policyId]);
         } else {
             pol.status = PolicyStatus.Closed;
             uint256 refund = pol.premiumPaid;
@@ -311,6 +326,11 @@ contract PolicyManager is Ownable, Pausable, ReentrancyGuard {
 
         bool refunded;
         if (pol.status == PolicyStatus.Active) {
+            // Đang trong thời gian xử lý bồi thường thì chưa được đóng
+            require(
+                block.timestamp > _claimDeadline(pol),
+                "Policy con trong han xu ly boi thuong"
+            );
             pol.status = PolicyStatus.Closed;
             liquidityPool.unlockCoverage(policyId);
         } else if (pol.status == PolicyStatus.PendingVerification) {
@@ -376,8 +396,32 @@ contract PolicyManager is Ownable, Pausable, ReentrancyGuard {
     }
 
     function markPaidOut(uint256 policyId) external onlyPayoutEngine {
+        require(
+            policies[policyId].status == PolicyStatus.Active,
+            "Policy khong o trang thai Active"
+        );
         policies[policyId].status = PolicyStatus.PaidOut;
         emit PayoutMarked(policyId);
+    }
+
+    function getClaimDeadline(uint256 policyId) external view returns (uint256) {
+        Policy storage pol = policies[policyId];
+        require(pol.id != 0, "Policy khong ton tai");
+        return _claimDeadline(pol);
+    }
+
+    function _claimDeadline(Policy storage pol) private view returns (uint256) {
+        uint256 d = claimDeadlineOf[pol.id];
+        return d != 0 ? d : pol.endTime;
+    }
+
+    function setClaimGracePeriod(uint256 seconds_) external onlyOwner {
+        require(
+            seconds_ >= MIN_CLAIM_GRACE && seconds_ <= MAX_CLAIM_GRACE,
+            "claim grace phai tu 1 den 30 ngay"
+        );
+        claimGracePeriod = seconds_;
+        emit ClaimGracePeriodSet(seconds_);
     }
 
     function setCoolingOffPeriod(uint256 seconds_) external onlyOwner {

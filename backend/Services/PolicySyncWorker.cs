@@ -63,7 +63,9 @@ public class PolicySyncWorker : BackgroundService
             ids.Add(i);
 
         var open = await db.PoliciesCache
-            .Where(p => p.Status == 0 || p.Status == 1)
+            .Where(p => (p.Status == 0 || p.Status == 1)
+                    && p.PolicyId > 0
+                    && p.PolicyId < (long)nextId)
             .Select(p => p.PolicyId)
             .ToListAsync(ct);
 

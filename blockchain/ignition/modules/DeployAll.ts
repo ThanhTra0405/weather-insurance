@@ -1,33 +1,48 @@
+
 import { buildModule } from "@nomicfoundation/hardhat-ignition/modules";
 
-// Deploy toàn bộ hệ thống theo đúng thứ tự phụ thuộc:
-// MockWeatherOracle -> LiquidityPool -> PolicyManager -> PayoutEngine
-// rồi nối quyền chéo giữa các contract (setPolicyManager / setPayoutEngine).
 export default buildModule("DeployAllModule", (m) => {
-  const deployer = m.getAccount(0);
-  const backendSigner = m.getParameter("backendSigner", deployer);
-  // 1. Oracle không phụ thuộc contract nào khác -> deploy trước
+  const backendSigner = m.getParameter("backendSigner");
+
   const oracle = m.contract("SelfHostedOracle", [backendSigner]);
 
-  // 2. Pool không cần biết địa chỉ PolicyManager lúc deploy (set sau qua setPolicyManager)
-  const pool = m.contract("LiquidityPool");
+  const pool = m.contract("LiquidityPool", [], {
+    after: [oracle],
+  });
 
-  // 3. PolicyManager cần địa chỉ pool ngay từ constructor
-  const policyManager = m.contract("PolicyManager", [pool]);
+  const policyManager = m.contract("PolicyManager", [pool], {
+    after: [pool],
+  });
 
-  // 4. PayoutEngine cần cả 3 địa chỉ trên
-  const payoutEngine = m.contract("PayoutEngine", [policyManager, pool, oracle]);
+  const payoutEngine = m.contract(
+    "PayoutEngine",
+    [policyManager, pool, oracle],
+    { after: [policyManager] }
+  );
 
-  // ==== Nối quyền chéo — bắt buộc, nếu thiếu bước nào hệ thống sẽ revert khi chạy thật ====
+  // Liên kết LiquidityPool với PolicyManager
+  const c1 = m.call(pool, "setPolicyManager", [policyManager], {
+    id: "pool_setPolicyManager",
+    after: [payoutEngine],
+  });
 
-  // Pool phải biết PolicyManager thật để cho phép lockCoverage/depositPremium/refundAndUnlock
-  m.call(pool, "setPolicyManager", [policyManager]);
+  // Liên kết LiquidityPool với PayoutEngine
+  const c2 = m.call(pool, "setPayoutEngine", [payoutEngine], {
+    id: "pool_setPayoutEngine",
+    after: [c1],
+  });
 
-  // Pool phải biết PayoutEngine thật để cho phép payOut (chỉ nó được rút tiền pool)
-  m.call(pool, "setPayoutEngine", [payoutEngine]);
+  // Liên kết PolicyManager với PayoutEngine
+  const c3 = m.call(policyManager, "setPayoutEngine", [payoutEngine], {
+    id: "pm_setPayoutEngine",
+    after: [c2],
+  });
 
-  // PolicyManager phải biết PayoutEngine thật để cho phép markPaidOut
-  m.call(policyManager, "setPayoutEngine", [payoutEngine]);
+  // Cấp quyền xác minh cho Backend Operator
+  m.call(policyManager, "setVerifier", [backendSigner], {
+    id: "pm_setVerifier",
+    after: [c3],
+  });
 
   return { oracle, pool, policyManager, payoutEngine };
 });

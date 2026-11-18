@@ -76,6 +76,12 @@ namespace backend.Services
             "name": "expirePolicy", "outputs": [], "stateMutability": "nonpayable", "type": "function"
           },
           {
+            "inputs": [{ "internalType": "uint256", "name": "policyId", "type": "uint256" }],
+            "name": "getClaimDeadline",
+            "outputs": [{ "internalType": "uint256", "name": "", "type": "uint256" }],
+            "stateMutability": "view", "type": "function"
+          },
+          {
             "inputs": [], "name": "nextPolicyId",
             "outputs": [{ "internalType": "uint256", "name": "", "type": "uint256" }],
             "stateMutability": "view", "type": "function"
@@ -200,6 +206,10 @@ namespace backend.Services
         public async Task<PolicyOutputDTO> GetPolicyAsync(ulong id, CancellationToken ct = default) =>
             await Contract.GetFunction("getPolicy")
                 .CallDeserializingToObjectAsync<PolicyOutputDTO>(new BigInteger(id));
+
+        /// Han cuoi xu ly boi thuong (>= endTime). Khac endTime: endTime la han BAO HIEM, day la han XU LY.
+        public async Task<long> GetClaimDeadlineAsync(ulong policyId, CancellationToken ct = default) =>
+            (long)await Contract.GetFunction("getClaimDeadline").CallAsync<BigInteger>(new BigInteger(policyId));
 
         public async Task<ProductDTO> GetProductAsync(ulong productId, CancellationToken ct = default) =>
             await Contract.GetFunction("products")

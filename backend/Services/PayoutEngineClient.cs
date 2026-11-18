@@ -4,6 +4,14 @@ using backend.Services.interfaces;
 
 namespace backend.Services
 {
+    [Nethereum.ABI.FunctionEncoding.Attributes.FunctionOutput]
+    public class EvaluateOutputDTO : Nethereum.ABI.FunctionEncoding.Attributes.IFunctionOutputDTO
+    {
+        [Nethereum.ABI.FunctionEncoding.Attributes.Parameter("bool", "met", 1)] public bool Met { get; set; }
+        [Nethereum.ABI.FunctionEncoding.Attributes.Parameter("uint256", "observed", 2)] public BigInteger Observed { get; set; }
+        [Nethereum.ABI.FunctionEncoding.Attributes.Parameter("uint256", "validDays", 3)] public BigInteger ValidDays { get; set; }
+    }
+
     public class PayoutEngineClient : IPayoutEngineClient
     {
         private const string Abi = """
@@ -12,6 +20,16 @@ namespace backend.Services
             "inputs": [{ "internalType": "uint256", "name": "policyId", "type": "uint256" }],
             "name": "isThresholdMet",
             "outputs": [{ "internalType": "bool", "name": "", "type": "bool" }],
+            "stateMutability": "view", "type": "function"
+          },
+          {
+            "inputs": [{ "internalType": "uint256", "name": "policyId", "type": "uint256" }],
+            "name": "evaluate",
+            "outputs": [
+              { "internalType": "bool", "name": "met", "type": "bool" },
+              { "internalType": "uint256", "name": "observed", "type": "uint256" },
+              { "internalType": "uint256", "name": "validDays", "type": "uint256" }
+            ],
             "stateMutability": "view", "type": "function"
           },
           {
@@ -32,6 +50,13 @@ namespace backend.Services
             _address = config["Blockchain:PayoutEngineAddress"]
                 ?? throw new InvalidOperationException("Thieu Blockchain:PayoutEngineAddress");
             _logger = logger;
+        }
+
+        public async Task<ThresholdEvaluation> EvaluateAsync(ulong policyId, CancellationToken ct = default)
+        {
+            var fn = _ctx.Web3.Eth.GetContract(Abi, _address).GetFunction("evaluate");
+            var r = await fn.CallDeserializingToObjectAsync<EvaluateOutputDTO>(new BigInteger(policyId));
+            return new ThresholdEvaluation(r.Met, r.Observed, (int)r.ValidDays);
         }
 
         public async Task<bool> IsThresholdMetAsync(ulong policyId, CancellationToken ct = default)

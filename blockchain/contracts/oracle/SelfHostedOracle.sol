@@ -2,25 +2,18 @@
 pragma solidity ^0.8.34;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
-import "../../interfaces/IWeatherOracle.sol";
+import "./DailyWeatherStore.sol";
 
-contract SelfHostedOracle is IWeatherOracle, Ownable {
-    struct Data {
-        uint256 value;
-        uint256 timestamp;
-    }
+/// Oracle tu van hanh: Backend gui du lieu cua TUNG NGAY DA KET THUC.
+/// - Moi (regionId, perilType, ngay) chi co 1 ban ghi; gui lai ngay da co se revert (khong ghi de).
+/// - Ngay khong co du lieu thi KHONG co ban ghi (khong bao gio mac dinh = 0).
+contract SelfHostedOracle is DailyWeatherStore, Ownable {
+    // Cho phep backfill toi da 120 ngay ke tu ngay du lieu
+    uint256 public constant MAX_BACKFILL_DAYS = 120;
 
-    // Luu theo (regionId, perilType): 0 = han han, 1 = lu, 2 = gio manh
-    mapping(bytes32 => mapping(uint8 => Data)) private data;
     address public backendSigner;
 
     event BackendSignerSet(address indexed signer);
-    event WeatherDataSubmitted(
-        bytes32 indexed regionId,
-        uint8 indexed perilType,
-        uint256 value,
-        uint256 timestamp
-    );
 
     modifier onlyBackend() {
         require(msg.sender == backendSigner, "Khong phai backend signer");
@@ -38,22 +31,27 @@ contract SelfHostedOracle is IWeatherOracle, Ownable {
         emit BackendSignerSet(_backendSigner);
     }
 
-    function submitWeatherData(
+    /// dayStart = timestamp 00:00 UTC+7 cua ngay du lieu; ngay phai ket thuc truoc block.timestamp.
+    function submitDailyData(
         bytes32 regionId,
         uint8 perilType,
-        uint256 value,
-        uint256 timestamp
+        uint256 dayStart,
+        uint256 value
     ) external onlyBackend {
-        require(perilType <= 2, "peril khong hop le");
-        data[regionId][perilType] = Data(value, timestamp);
-        emit WeatherDataSubmitted(regionId, perilType, value, timestamp);
+        _storeDaily(regionId, perilType, dayStart, value, 1 days, MAX_BACKFILL_DAYS * 1 days);
     }
 
-    function getWeatherData(
+    /// Gui nhieu ngay 1 tx (backfill). Revert toan bo neu 1 ngay da co / khong hop le.
+    function submitDailyDataBatch(
         bytes32 regionId,
-        uint8 perilType
-    ) external view returns (uint256, uint256) {
-        Data memory d = data[regionId][perilType];
-        return (d.value, d.timestamp);
+        uint8 perilType,
+        uint256[] calldata dayStarts,
+        uint256[] calldata values
+    ) external onlyBackend {
+        require(dayStarts.length == values.length, "Do dai mang khong khop");
+        require(dayStarts.length > 0 && dayStarts.length <= MAX_BATCH, "So ngay khong hop le");
+        for (uint256 i = 0; i < dayStarts.length; i++) {
+            _storeDaily(regionId, perilType, dayStarts[i], values[i], 1 days, MAX_BACKFILL_DAYS * 1 days);
+        }
     }
 }

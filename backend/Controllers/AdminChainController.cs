@@ -370,7 +370,8 @@ public class AdminChainController : ControllerBase
                 activePolicies = g.Count(),
                 lastValueScaled = lastOk?.ValueScaled?.ToString(),
                 lastDataTs = lastOk?.DataTs,
-                ageMinutes = lastOk?.DataTs != null ? (long?)Math.Max(0, (now - lastOk.DataTs.Value) / 60) : null,
+                // Du lieu gio theo NGAY: tuoi = thoi gian ke tu lan gui thanh cong gan nhat (DataTs la 00:00 cua ngay du lieu)
+                ageMinutes = lastOk != null ? (long?)Math.Max(0, (long)(DateTimeOffset.UtcNow - lastOk.CreatedAt).TotalMinutes) : null,
                 lastTxHash = lastOk?.TxHash,
                 lastStatus = lastAny?.Status,
                 lastError = lastAny?.Status == "error" ? lastAny.Error : null,
@@ -449,35 +450,39 @@ public class AdminChainController : ControllerBase
 
         if (f.Count > 0) return ApiResults.Validation(f);
 
-        var scaled = (BigInteger)Math.Round(r.Value * 100m, 0, MidpointRounding.AwayFromZero);
+        var scaled = OracleDay.Scale(r.Value);
 
-        // Timestamp = max(gio he thong, gio block moi nhat) de dung ca khi hardhat local da tua thoi gian
-        var ts = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-        try
-        {
-            var block = await _ctx.Web3.Eth.Blocks.GetBlockWithTransactionsHashesByNumber
-                .SendRequestAsync(Nethereum.RPC.Eth.DTOs.BlockParameter.CreateLatest());
-            ts = Math.Max(ts, (long)block.Timestamp.Value);
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            _logger.LogWarning(ex, "Khong doc duoc block moi nhat, dung gio he thong");
-        }
+        // Oracle luu 1 ban ghi / ngay / vung / peril va KHONG ghi de: gia lap = gui gia tri cho cac ngay DA KET THUC.
+        // Date = ngay cuoi (mac dinh hom qua, gio VN); Days = so ngay lien tiep ket thuc tai Date (mac dinh 1, toi da 40).
+        // Han han can du 30 ngay: gui Days = 30 voi gia tri mm / NGAY.
+        var days = r.Days ?? 1;
+        if (days is < 1 or > 40)
+            return ApiResults.Validation(new Dictionary<string, string> { ["days"] = "Days phải từ 1 đến 40" });
+        var lastDay = r.Date ?? OracleDay.TodayLocal(DateTimeOffset.UtcNow).AddDays(-1);
+        if (lastDay >= OracleDay.TodayLocal(DateTimeOffset.UtcNow))
+            return ApiResults.Validation(new Dictionary<string, string> { ["date"] = "Chỉ gửi được ngày đã kết thúc (trước hôm nay)" });
 
         var peril = (byte)r.PerilType;
+        var batch = Enumerable.Range(0, days)
+            .Select(i => lastDay.AddDays(i - days + 1))
+            .Select(d => (DayStart: OracleDay.DayStart(d), Value: scaled))
+            .ToList();
+        var ts = batch[^1].DayStart;
         try
         {
-            var tx = await _oracle.SubmitWeatherDataAsync(regionId!, peril, scaled, ts, ct);
+            var tx = days == 1
+                ? await _oracle.SubmitWeatherDataAsync(regionId!, peril, scaled, ts, ct)
+                : await _oracle.SubmitDailyBatchAsync(regionId!, peril, batch, ct);
             await WriteOracleLogAsync(regionId!, peril, scaled, ts, tx, "ok", null);
             await _audit.WriteAsync("staff", Actor, "oracle_simulate", $"region:{regionId}",
-                new { perilType = r.PerilType, r.Value, txHash = tx }, CancellationToken.None);
-            return Ok(new { txHash = tx, regionId, perilType = r.PerilType, valueScaled = scaled.ToString(), timestamp = ts });
+                new { perilType = r.PerilType, r.Value, days, date = lastDay.ToString("yyyy-MM-dd"), txHash = tx }, CancellationToken.None);
+            return Ok(new { txHash = tx, regionId, perilType = r.PerilType, valueScaled = scaled.ToString(), timestamp = ts, days, date = lastDay.ToString("yyyy-MM-dd") });
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             _logger.LogError(ex, "Loi simulate oracle");
             await WriteOracleLogAsync(regionId!, peril, scaled, ts, null, "error", Short(ex.Message, 500));
-            return ApiResults.BadGateway("Gửi giao dịch thất bại: " + Short(ex.Message));
+            return ApiResults.BadGateway("Gửi giao dịch thất bại (ngày đã có dữ liệu thì không thể ghi đè): " + Short(ex.Message));
         }
     }
 
@@ -508,6 +513,7 @@ public class AdminChainController : ControllerBase
     private static object MapCycle(OracleCycleResult r) => new
     {
         submittedCount = r.SubmittedCount,
+        gapCount = r.GapCount,
         payoutCount = r.PayoutCount,
         expiredCount = r.ExpiredCount,
         errors = r.Errors,
@@ -562,4 +568,5 @@ public record ActiveRequest(bool Active);
 public record SecondsRequest(long Seconds);
 public record CreateProductRequest(string Name, int PerilType, decimal Threshold, int DurationDays,
     decimal PremiumEth, decimal CoverageEth);
-public record SimulateRequest(string? RegionId, decimal? Lat, decimal? Lng, int PerilType, decimal Value);
+public record SimulateRequest(string? RegionId, decimal? Lat, decimal? Lng, int PerilType, decimal Value,
+    DateOnly? Date = null, int? Days = null);

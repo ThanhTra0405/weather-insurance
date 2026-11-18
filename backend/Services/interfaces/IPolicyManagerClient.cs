@@ -9,6 +9,7 @@ namespace backend.Services.interfaces
         Task<ulong> GetNextPolicyIdAsync(CancellationToken ct = default);
         Task<ulong> GetNextProductIdAsync(CancellationToken ct = default);
         Task<PolicyOutputDTO> GetPolicyAsync(ulong id, CancellationToken ct = default);
+        Task<long> GetClaimDeadlineAsync(ulong policyId, CancellationToken ct = default);
         Task<ProductDTO> GetProductAsync(ulong productId, CancellationToken ct = default);
         Task<bool> HasEvidenceOnChainAsync(ulong policyId, CancellationToken ct = default);
     }

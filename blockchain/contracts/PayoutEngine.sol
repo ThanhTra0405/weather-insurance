@@ -7,6 +7,7 @@ import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
 import "../interfaces/IWeatherOracle.sol";
 import "./PolicyManager.sol";
+import "./libraries/DayTime.sol";
 
 interface ILiquidityPoolPayout {
     function payOut(
@@ -17,12 +18,15 @@ interface ILiquidityPoolPayout {
 }
 
 contract PayoutEngine is Ownable, Pausable, ReentrancyGuard {
-    // Cua so tong mua cua han han (value = tong mua 30 ngay ket thuc tai ts)
-    uint256 public constant DROUGHT_WINDOW = 30 days;
+    // Han han: TONG mua cua 30 ngay lich LIEN TIEP < threshold (cung don vi oracle: mm x100)
+    uint256 public constant DROUGHT_WINDOW_DAYS = 30;
 
     PolicyManager public policyManager;
     ILiquidityPoolPayout public liquidityPool;
     IWeatherOracle public oracle;
+
+    // Chong chi tra trung (ngoai trang thai policy va lockedAmount cua pool)
+    mapping(uint256 => bool) public paidOut;
 
     event PayoutTriggered(
         uint256 indexed policyId,
@@ -44,26 +48,53 @@ contract PayoutEngine is Ownable, Pausable, ReentrancyGuard {
         oracle = IWeatherOracle(_oracle);
     }
 
-    function isThresholdMet(uint256 policyId) public view returns (bool) {
+    function isThresholdMet(uint256 policyId) public view returns (bool met) {
+        (met, , ) = evaluate(policyId);
+    }
+
+    /// observed: han han = tong mua cua cua so 30 ngay; lu/gio = gia tri cua ngay danh gia.
+    /// validDays: so ngay co ban ghi hop le trong cua so (han han can du 30).
+    function evaluate(
+        uint256 policyId
+    ) public view returns (bool met, uint256 observed, uint256 validDays) {
         PolicyManager.Policy memory pol = policyManager.getPolicy(policyId);
         (, , uint8 perilType, uint256 threshold, , , , ) = policyManager
             .products(pol.productId);
 
-        (uint256 value, uint256 ts) = oracle.getWeatherData(
-            pol.regionId,
-            perilType
-        );
-        // startTime đã bao gồm cooling-off (PolicyManager.verifyPolicy set),
-        // nên dữ liệu trước mốc này không được tính
-        if (ts < pol.startTime) return false;
+        // Cac ngay lich NAM TRON trong [startTime, endTime]:
+        // khong dung du lieu truoc startTime, cung nhu sau endTime.
+        uint256 firstDay = DayTime.dayIdOf(pol.startTime + 1 days - 1);
+        uint256 lastDay = DayTime.dayIdOf(pol.endTime) - 1; // endTime >= 1 ngay nen khong underflow
+        if (lastDay < firstDay) return (false, 0, 0);
+
+        uint256 latest = oracle.latestDayId(pol.regionId, perilType);
+        if (latest == 0) return (false, 0, 0);
+        // Ngay cuoi cua bao hiem co the duoc oracle cap nhat SAU endTime: van danh gia den lastDay
+        uint256 endDay = latest < lastDay ? latest : lastDay;
+        if (endDay < firstDay) return (false, 0, 0);
 
         if (perilType == 0) {
-            // Han han: cua so 30 ngay phai nam hoan toan trong thoi gian co hieu luc
-            if (ts < pol.startTime + DROUGHT_WINDOW) return false;
-            return value < threshold;
+            if (endDay + 1 < firstDay + DROUGHT_WINDOW_DAYS) return (false, 0, 0);
+            uint256 startDay = endDay + 1 - DROUGHT_WINDOW_DAYS;
+            (uint256 total, uint256 present) = oracle.sumDailyRange(
+                pol.regionId,
+                0,
+                DayTime.dayStartOf(startDay),
+                DROUGHT_WINDOW_DAYS
+            );
+            // Thieu ngay => khong danh gia (khong coi ngay thieu la 0 mm)
+            if (present != DROUGHT_WINDOW_DAYS) return (false, total, present);
+            return (total < threshold, total, present);
         }
-        // Lu, gio manh
-        return value > threshold;
+
+        // Lu, gio manh: gia tri cua ngay gan nhat nam trong thoi gian bao hiem
+        (bool exists, uint256 value) = oracle.getDailyData(
+            pol.regionId,
+            perilType,
+            DayTime.dayStartOf(endDay)
+        );
+        if (!exists) return (false, 0, 0);
+        return (value > threshold, value, 1);
     }
 
     function checkAndPayout(
@@ -74,18 +105,15 @@ contract PayoutEngine is Ownable, Pausable, ReentrancyGuard {
             pol.status == PolicyManager.PolicyStatus.Active,
             "Policy chua active hoac da dong"
         );
-        require(block.timestamp <= pol.endTime, "Policy het han");
-
-        // Chống mua policy sau khi đã biết trước thiên tai:
-        // chỉ nhận dữ liệu oracle sau startTime (= thời điểm duyệt + cooling-off)
-        (, , uint8 perilType, , , , , ) = policyManager.products(
-            pol.productId
+        require(!paidOut[policyId], "Policy da duoc chi tra");
+        // Het han xu ly boi thuong (claimDeadline >= endTime), khong phai het han bao hiem
+        require(
+            block.timestamp <= policyManager.getClaimDeadline(policyId),
+            "Het han xu ly boi thuong"
         );
-        (, uint256 ts) = oracle.getWeatherData(pol.regionId, perilType);
-        require(ts >= pol.startTime, "Du lieu truoc thoi diem hieu luc");
-
         require(isThresholdMet(policyId), "Chua dat nguong");
 
+        paidOut[policyId] = true;
         liquidityPool.payOut(policyId, pol.holder, pol.coverageAmount);
         policyManager.markPaidOut(policyId);
 
